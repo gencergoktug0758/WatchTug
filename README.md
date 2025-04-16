@@ -51,7 +51,7 @@ Modern, mobil uyumlu ve düşük gecikmeli gerçek zamanlı ekran paylaşım uyg
    ```
    http://localhost:3000
    ```
-
+(EĞER NGROK İLE KULLANMAK İSTİYORSANIZ "simple-launcher.bat" DOSYASINI AÇIN.)
 ## İnternet Üzerinden Erişim
 
 Uygulamayı internet üzerinden erişilebilir yapmak için Ngrok kullanabilirsiniz:
