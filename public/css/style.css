@@ -1,0 +1,239 @@
+/* WatchTug V2 - Custom CSS */
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.6s ease-out forwards;
+}
+
+.feature-item {
+  transition: all 0.3s ease;
+}
+
+.feature-item:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(79, 70, 229, 0.5);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(79, 70, 229, 0.7);
+}
+
+/* Message Styles */
+.message {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.message.system-message {
+  color: #a1a1aa;
+  font-style: italic;
+}
+
+/* User badge in chat */
+.user-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-right: 4px;
+  background-color: rgba(79, 70, 229, 0.2);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* User in room container */
+.user-item {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  background-color: rgba(0, 0, 0, 0.3);
+  transition: all 0.2s;
+}
+
+.user-item:hover {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.user-item.sharing {
+  background-color: rgba(79, 70, 229, 0.3);
+  border: 1px solid rgba(79, 70, 229, 0.5);
+}
+
+.user-item .user-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: rgba(79, 70, 229, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+  font-weight: 600;
+}
+
+.user-item.self {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Toast animation */
+@keyframes slideIn {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+/* Emoji Picker Styles */
+emoji-picker {
+    --background-rgb: 23, 23, 23;
+    --border-radius: 8px;
+    --category-icon-size: 20px;
+    --color-border-over: rgba(255, 255, 255, 0.1);
+    --color-border: rgba(255, 255, 255, 0.1);
+    --font-family: 'Poppins', sans-serif;
+    --font-size: 14px;
+    --rgb-accent: 99, 102, 241;
+    --rgb-background: 23, 23, 23;
+    --rgb-color: 255, 255, 255;
+    --rgb-input: 35, 35, 35;
+    --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    margin-bottom: 8px;
+    max-height: 350px;
+    width: 320px;
+}
+
+emoji-picker.dark {
+    --background-rgb: 23, 23, 23;
+    --rgb-background: 23, 23, 23;
+    --rgb-color: 255, 255, 255;
+}
+
+emoji-picker::part(input) {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    color: white;
+    font-family: 'Poppins', sans-serif;
+    padding: 8px 12px;
+}
+
+emoji-picker::part(nav) {
+    background: rgba(0, 0, 0, 0.2);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+emoji-picker::part(indicator) {
+    background: rgb(var(--rgb-accent));
+}
+
+emoji-picker::part(category-button) {
+    color: rgba(255, 255, 255, 0.7);
+    transition: all 0.2s;
+}
+
+emoji-picker::part(category-button):hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+emoji-picker::part(category-button)[active] {
+    background: rgba(var(--rgb-accent), 0.2);
+    color: rgb(var(--rgb-accent));
+}
+
+emoji-picker::part(preview) {
+    background: rgba(0, 0, 0, 0.2);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Video container */
+.video-placeholder {
+  background-color: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  body {
+    font-size: 14px;
+  }
+  
+  .container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .local-preview {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    width: 120px;
+    height: 90px;
+    margin: 0;
+    border-radius: 8px 8px 0 0;
+    z-index: 1000;
+  }
+
+  .local-preview video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  /* Alt yayın için ek padding */
+  body {
+    padding-bottom: 90px;
+  }
+}
+
+/* Yerel önizleme için stiller */
+.local-preview {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 200px;
+    height: 150px;
+    background-color: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    z-index: 1000;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    border: 2px solid #4a5568;
+    transition: all 0.3s ease;
+}
+
+.local-preview.hidden {
+    display: none;
+}
+
+.local-preview video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+} 

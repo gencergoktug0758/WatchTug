@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WatchTug V2 - Oda</title>
+    <link rel="icon" type="image/svg+xml" href="img/logo.svg">
+    <!-- Modern font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            200: '#c7d2fe',
+                            300: '#a5b4fc',
+                            400: '#818cf8',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            800: '#3730a3',
+                            900: '#312e81',
+                            950: '#1e1b4b',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Poppins', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css">
+    <!-- Emoji Mart CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@emoji-mart/css@latest/css/emoji-mart.css">
+    <!-- Emoji Mart JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@emoji-mart/data@latest/sets/14/native.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emoji-mart/js@latest"></script>
+    <!-- Emoji Picker Element -->
+    <script src="https://cdn.jsdelivr.net/npm/emoji-picker-element@1.18.3/index.js" type="module"></script>
+    <style>
+        /* Oda Özel Stilleri */
+        .user-item {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            margin-bottom: 0.25rem;
+            border-radius: 0.5rem;
+            background-color: rgba(0, 0, 0, 0.3);
+        }
+        
+        .user-avatar {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 9999px;
+            background-color: theme('colors.primary.600');
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            margin-right: 0.75rem;
+        }
+        
+        .user-item.self {
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+        
+        .user-item.sharing {
+            border-left: 3px solid theme('colors.primary.500');
+        }
+        
+        .message {
+            margin-bottom: 0.5rem;
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+        
+        .system-message {
+            background-color: rgba(0, 0, 0, 0.2);
+            font-style: italic;
+            color: theme('colors.gray.400');
+        }
+        
+        .user-badge {
+            color: theme('colors.primary.500');
+            font-weight: 600;
+            margin-right: 0.5rem;
+        }
+        
+        .toast {
+            position: fixed;
+            bottom: -100px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 50;
+            transition: all 0.3s ease-in-out;
+        }
+        
+        .toast-slide-in {
+            bottom: 20px;
+        }
+        
+        .toast-slide-out {
+            bottom: -100px;
+        }
+        
+        /* Medya Alanı Özellikleri */
+        .media-area {
+            position: relative;
+            width: 100%;
+            height: 0;
+            padding-bottom: 56.25%; /* 16:9 aspect ratio */
+            overflow: hidden;
+            background-color: #000;
+            border-radius: 0.5rem;
+        }
+        
+        .media-area video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        
+        .waiting-screen, .no-permission-screen, .connecting-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 10;
+        }
+        
+        .sharing-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+        }
+        
+        /* Yeni eklenen stiller */
+        .video-controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 40px;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 25;
+        }
+        
+        .media-area:hover .video-controls {
+            opacity: 1;
+        }
+        
+        .video-control-btn {
+            background: transparent;
+            border: none;
+            color: white;
+            margin: 0 5px;
+            cursor: pointer;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background-color 0.2s;
+        }
+        
+        .video-control-btn:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+        
+        .volume-control {
+            display: flex;
+            align-items: center;
+            margin-left: 10px;
+        }
+        
+        .volume-slider {
+            width: 80px;
+            margin-left: 5px;
+            height: 5px;
+            -webkit-appearance: none;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 2px;
+            outline: none;
+        }
+        
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: white;
+            cursor: pointer;
+        }
+        
+        .volume-slider.muted {
+            opacity: 0.5;
+        }
+        
+        .emoji-picker {
+            position: absolute;
+            bottom: 50px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.9);
+            border-radius: 8px;
+            padding: 10px;
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 5px;
+            max-width: 300px;
+            z-index: 30;
+        }
+        
+        .emoji-btn {
+            font-size: 18px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+            padding: 5px;
+            transition: background-color 0.2s;
+        }
+        
+        .emoji-btn:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        /* Tiyatro Modu */
+        .theater-layout {
+            max-width: 100% !important;
+            padding: 0 !important;
+            display: flex !important;
+            flex-direction: row !important;
+            height: 100vh !important;
+            width: 100% !important;
+            gap: 0 !important;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            z-index: 9999 !important;
+            background: #000 !important;
+            overflow: hidden !important;
+        }
+        
+        .theater-layout header {
+            display: none !important;
+        }
+        
+        .theater-video {
+            width: 85% !important;
+            height: 100vh !important;
+            padding: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+        }
+        
+        .theater-video .bg-black\/30 {
+            background: transparent !important;
+            box-shadow: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            height: 100% !important;
+            flex: 1 !important;
+            display: flex !important;
+            flex-direction: column !important;
+        }
+        
+        .theater-video h2 {
+            display: none !important;
+        }
+        
+        .theater-video .media-area {
+            position: relative !important;
+            height: 100% !important;
+            padding: 0 !important;
+            flex: 1 !important;
+            border-radius: 0 !important;
+        }
+        
+        .theater-chat {
+            width: 15% !important;
+            height: 100vh !important;
+            padding: 10px !important;
+            overflow-y: auto !important;
+            display: flex !important;
+            flex-direction: column !important;
+        }
+        
+        /* Video Kontrolleri - Tiyatro modunda */
+        .theater-video .video-controls {
+            bottom: 0 !important;
+            height: 50px !important;
+            padding: 0 20px !important;
+            opacity: 0 !important;
+        }
+        
+        .theater-video:hover .video-controls {
+            opacity: 1 !important;
+        }
+        
+        /* Mobil Görünüm için Tiyatro Modu */
+        @media (max-width: 768px) {
+            .theater-layout {
+                flex-direction: column !important;
+                height: 100vh !important;
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+                bottom: 0 !important;
+            }
+            
+            .theater-video {
+                width: 100% !important;
+                height: 45vh !important; /* Video yüksekliğini azalttım */
+                min-height: 200px !important;
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+            }
+            
+            .theater-video .media-area {
+                height: 100% !important;
+                border-radius: 0 !important;
+            }
+
+            .theater-video .video-controls {
+                bottom: 0 !important;
+            }
+            
+            .theater-chat {
+                width: 100% !important;
+                height: 55vh !important; /* Chat yüksekliğini artırdım */
+                position: fixed !important;
+                top: 45vh !important; /* Video altında başlasın */
+                left: 0 !important;
+                right: 0 !important;
+                bottom: 0 !important;
+                padding: 10px !important;
+                background: rgba(0, 0, 0, 0.9) !important;
+                display: flex !important;
+                flex-direction: column !important;
+                margin: 0 !important;
+            }
+
+            .theater-chat h2 {
+                font-size: 1rem !important;
+                margin-bottom: 8px !important;
+            }
+
+            .theater-chat #chatMessages {
+                flex: 1 !important;
+                height: calc(55vh - 120px) !important;
+                overflow-y: auto !important;
+                -webkit-overflow-scrolling: touch !important;
+                padding-bottom: 80px !important; /* Alt boşluğu 120px'den 80px'e düşürdüm */
+                margin-bottom: 50px !important;
+            }
+
+            .theater-chat #chatForm {
+                position: fixed !important;
+                bottom: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+                padding: 8px !important;
+                background: rgba(0, 0, 0, 0.95) !important;
+                border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+                margin: 0 !important;
+            }
+
+            .theater-chat #chatForm .flex {
+                background: rgba(0, 0, 0, 0.3) !important; /* Form arka planını biraz daha belirgin yaptım */
+                border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            }
+
+            .theater-chat #chatForm input {
+                height: 45px !important; /* Input yüksekliğini artırdım */
+                font-size: 0.95rem !important;
+            }
+
+            .theater-chat #chatForm button {
+                height: 45px !important; /* Buton yüksekliğini artırdım */
+            }
+
+            /* Mesajların görünümünü iyileştirme */
+            .theater-chat .message {
+                padding: 8px !important;
+                margin-bottom: 4px !important;
+                font-size: 0.9rem !important;
+                background: rgba(255, 255, 255, 0.05) !important;
+                border-radius: 8px !important;
+            }
+
+            .theater-chat .user-badge {
+                font-size: 0.8rem !important;
+                padding: 2px 6px !important;
+                background: rgba(99, 102, 241, 0.2) !important;
+                border-radius: 4px !important;
+            }
+
+            /* Kullanıcılar panelini gizle */
+            .theater-chat .bg-black\/30:first-child {
+                display: none !important;
+            }
+        }
+
+        /* Yeni Mesaj Bildirimi */
+        .message-notification {
+            position: fixed !important;
+            bottom: 20px !important;
+            right: 20px !important;
+            background: rgba(0, 0, 0, 0.7) !important;
+            backdrop-filter: blur(5px) !important;
+            border-radius: 8px !important;
+            padding: 10px 15px !important;
+            max-width: 300px !important;
+            z-index: 99999 !important;
+            transform: translateX(120%) !important;
+            transition: transform 0.3s ease-out !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+            pointer-events: none !important;
+        }
+
+        .message-notification.show {
+            transform: translateX(0) !important;
+        }
+
+        .message-notification .notification-header {
+            display: flex !important;
+            align-items: center !important;
+            margin-bottom: 5px !important;
+        }
+
+        .message-notification .notification-sender {
+            color: theme('colors.primary.400') !important;
+            font-weight: 600 !important;
+            font-size: 0.9rem !important;
+            margin-right: 8px !important;
+        }
+
+        .message-notification .notification-time {
+            color: rgba(255, 255, 255, 0.5) !important;
+            font-size: 0.8rem !important;
+        }
+
+        .message-notification .notification-content {
+            color: rgba(255, 255, 255, 0.9) !important;
+            font-size: 0.95rem !important;
+            line-height: 1.4 !important;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(120%); }
+            to { transform: translateX(0); }
+        }
+
+        @keyframes slideOut {
+            from { transform: translateX(0); }
+            to { transform: translateX(120%); }
+        }
+
+        .notification-slide-in {
+            animation: slideIn 0.3s ease-out forwards;
+        }
+
+        .notification-slide-out {
+            animation: slideOut 0.3s ease-out forwards;
+        }
+
+        /* Tam ekran modunda bildirimlerin görünmesi için */
+        .theater-layout .message-notification,
+        .theater-layout.fullscreen .message-notification {
+            z-index: 99999 !important;
+        }
+
+        /* Tam ekran modunda dikey ekran için özel stiller */
+        @media screen and (orientation: portrait) {
+            .media-area:fullscreen {
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                padding: 0 !important;
+                height: 100% !important;
+            }
+
+            .media-area:fullscreen video {
+                position: relative !important;
+                width: 100% !important;
+                height: auto !important;
+                max-height: 100vh !important;
+                margin: auto !important;
+            }
+        }
+
+        /* Webkit tarayıcılar için */
+        @media screen and (orientation: portrait) {
+            .media-area:-webkit-full-screen {
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                padding: 0 !important;
+                height: 100% !important;
+            }
+
+            .media-area:-webkit-full-screen video {
+                position: relative !important;
+                width: 100% !important;
+                height: auto !important;
+                max-height: 100vh !important;
+                margin: auto !important;
+            }
+        }
+
+        /* Mozilla Firefox için */
+        @media screen and (orientation: portrait) {
+            .media-area:-moz-full-screen {
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                padding: 0 !important;
+                height: 100% !important;
+            }
+
+            .media-area:-moz-full-screen video {
+                position: relative !important;
+                width: 100% !important;
+                height: auto !important;
+                max-height: 100vh !important;
+                margin: auto !important;
+            }
+        }
+    </style>
+</head>
+<body class="font-sans bg-gradient-to-br from-gray-900 to-primary-900 text-white min-h-screen">
+    <div class="container mx-auto px-4 py-4 flex flex-col min-h-screen" id="mainContainer">
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-center py-3 mb-4 border-b border-gray-800">
+            <div class="logo flex items-center mb-4 md:mb-0">
+                <i class="fas fa-tv text-primary-500 text-3xl mr-3"></i>
+                <h1 class="text-2xl font-bold tracking-tight">WatchTug<span class="text-primary-500">V2</span></h1>
+            </div>
+            <div class="room-info flex items-center space-x-3">
+                <div>
+                    <span class="text-sm text-gray-400">Oda ID:</span>
+                    <span id="roomIdDisplay" class="ml-1 font-mono bg-black/20 px-3 py-1 rounded-md"></span>
+                </div>
+                <button id="copyRoomId" class="text-gray-400 hover:text-primary-400 transition-colors p-2">
+                    <i class="fas fa-copy"></i>
+                </button>
+            </div>
+            <div class="controls flex items-center space-x-4">
+                <button id="leaveRoomBtn" class="flex items-center bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg transition-colors">
+                    <i class="fas fa-sign-out-alt mr-2"></i>
+                    <span>Odadan Ayrıl</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Ana İçerik -->
+        <div class="flex flex-col lg:flex-row flex-grow gap-4">
+            <!-- Sol Panel - Video Alanı -->
+            <div class="lg:w-3/4 flex flex-col" id="videoContainer">
+                <div class="bg-black/30 rounded-lg shadow-lg p-3 mb-4">
+                    <h2 class="text-xl font-semibold mb-3">Ekran Paylaşımı</h2>
+                    <div class="media-area">
+                        <video id="screenDisplay" autoplay playsinline preload="auto" 
+                               style="width: 100%; height: 100%; object-fit: contain;"
+                               onloadedmetadata="this.play()"
+                               onerror="handleVideoError(this)"
+                               onstalled="handleVideoStalled(this)"
+                               onwaiting="handleVideoWaiting(this)"
+                               oncanplay="handleVideoCanPlay(this)"
+                               onplaying="handleVideoPlaying(this)"
+                               onpause="handleVideoPause(this)"
+                               onended="handleVideoEnded(this)">
+                        </video>
+                        
+                        <!-- Bekleme Ekranı -->
+                        <div id="waitingScreen" class="waiting-screen">
+                            <i class="fas fa-desktop text-5xl text-primary-400 mb-4"></i>
+                            <p class="text-lg">Henüz ekran paylaşımı yapan yok</p>
+                            <button id="shareScreenBtn" class="mt-4 px-4 py-2 bg-primary-600 hover:bg-primary-700 rounded-lg flex items-center">
+                                <i class="fas fa-share mr-2"></i>
+                                <span>Ekranını Paylaş</span>
+                            </button>
+                        </div>
+                        
+                        <!-- İzin Hatası Ekranı -->
+                        <div id="noPermissionScreen" class="no-permission-screen hidden">
+                            <i class="fas fa-exclamation-triangle text-5xl text-yellow-500 mb-4"></i>
+                            <p class="text-lg mb-2">Ekran paylaşım izni reddedildi</p>
+                            <p class="text-gray-400 mb-4">Lütfen tarayıcı izinlerini kontrol edin</p>
+                            <button id="tryAgainBtn" class="px-4 py-2 bg-primary-600 hover:bg-primary-700 rounded-lg">
+                                <span>Tekrar Dene</span>
+                            </button>
+                        </div>
+                        
+                        <!-- Bağlanıyor Ekranı -->
+                        <div id="connectingScreen" class="connecting-screen hidden">
+                            <i class="fas fa-circle-notch fa-spin text-5xl text-primary-400 mb-4"></i>
+                            <p class="text-lg">Ekran paylaşımı başlatılıyor...</p>
+                        </div>
+                        
+                        <!-- Paylaşım Kontrolleri -->
+                        <div id="sharingControls" class="sharing-controls hidden">
+                            <button id="stopSharingBtn" class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg flex items-center">
+                                <i class="fas fa-stop-circle mr-2"></i>
+                                <span>Paylaşımı Durdur</span>
+                            </button>
+                        </div>
+                        
+                        <!-- Video Kontrolleri -->
+                        <div class="video-controls">
+                            <button id="muteBtn" class="video-control-btn" title="Sessiz (M)">
+                                <i class="fas fa-volume-up"></i>
+                            </button>
+                            <div class="volume-control">
+                                <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="100">
+                            </div>
+                            <div class="flex-grow"></div>
+                            <button id="theaterModeBtn" class="video-control-btn" title="Tiyatro Modu (T)">
+                                <i class="fas fa-film"></i>
+                            </button>
+                            <button id="fullscreenBtn" class="video-control-btn" title="Tam Ekran (F)">
+                                <i class="fas fa-expand"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Sağ Panel - Kullanıcılar ve Sohbet -->
+            <div class="lg:w-1/4 flex flex-col gap-4" id="chatContainer">
+                <!-- Kullanıcılar Paneli -->
+                <div class="bg-black/30 rounded-lg shadow-lg p-3 flex-shrink-0">
+                    <h2 class="text-xl font-semibold mb-3">Kullanıcılar</h2>
+                    <div id="usersContainer" class="space-y-2">
+                        <!-- Kullanıcılar buraya dinamik olarak eklenecek -->
+                        <div class="text-gray-500 text-center">Kullanıcılar yükleniyor...</div>
+                    </div>
+                </div>
+                
+                <!-- Sohbet Paneli -->
+                <div class="bg-black/30 rounded-lg shadow-lg p-3 flex-grow flex flex-col">
+                    <h2 class="text-xl font-semibold mb-3">Sohbet</h2>
+                    <div id="chatMessages" class="flex-grow overflow-y-auto mb-3 space-y-2 h-64">
+                        <!-- Mesajlar buraya dinamik olarak eklenecek -->
+                    </div>
+                    <form id="chatForm" class="relative">
+                        <div class="flex items-center bg-black/40 rounded-lg">
+                            <input 
+                                type="text" 
+                                id="messageInput" 
+                                class="bg-transparent w-full px-4 py-2 focus:outline-none" 
+                                placeholder="Bir mesaj yazın..."
+                            >
+                            <div class="relative">
+                                <button 
+                                    type="button" 
+                                    id="emojiPickerBtn" 
+                                    class="text-gray-400 hover:text-primary-400 px-2"
+                                >
+                                    <i class="far fa-smile"></i>
+                                </button>
+                            </div>
+                            <button 
+                                type="submit" 
+                                class="bg-primary-600 hover:bg-primary-700 rounded-r-lg px-4 py-2"
+                            >
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                        
+                        <!-- Emoji Picker -->
+                        <div id="emojiPicker" class="emoji-picker hidden">
+                            <!-- Emojiler JavaScript ile dinamik olarak eklenecek -->
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Toast Bildirimi -->
+    <div id="toast" class="toast hidden bg-black/80 px-4 py-3 rounded-lg shadow-lg flex items-center">
+        <span id="toastMessage" class="flex-grow"></span>
+        <button id="closeToast" class="ml-3 text-gray-400 hover:text-white">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+    
+    <!-- Mesaj Bildirimi -->
+    <div id="messageNotification" class="message-notification hidden">
+        <div class="notification-header">
+            <span class="notification-sender"></span>
+            <span class="notification-time"></span>
+        </div>
+        <div class="notification-content"></div>
+    </div>
+    
+    <!-- Socket.io ve Script -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="js/room.js"></script>
+    <script type="module">
+        // Emoji picker initialization
+        const emojiPickerBtn = document.getElementById('emojiPickerBtn');
+        const messageInput = document.getElementById('messageInput');
+        const chatForm = document.getElementById('chatForm');
+
+        // Emoji picker elementini oluştur
+        const picker = document.createElement('emoji-picker');
+        picker.style.position = 'absolute';
+        picker.style.bottom = '100%';
+        picker.style.left = '0';
+        picker.style.zIndex = '1000';
+        picker.style.display = 'none';
+        picker.classList.add('dark');
+        chatForm.appendChild(picker);
+
+        // Emoji seçildiğinde
+        picker.addEventListener('emoji-click', event => {
+            const emoji = event.detail.unicode;
+            const cursorPos = messageInput.selectionStart;
+            const textBeforeCursor = messageInput.value.substring(0, cursorPos);
+            const textAfterCursor = messageInput.value.substring(cursorPos);
+            
+            messageInput.value = textBeforeCursor + emoji + textAfterCursor;
+            messageInput.focus();
+            
+            const newCursorPos = cursorPos + emoji.length;
+            messageInput.setSelectionRange(newCursorPos, newCursorPos);
+            
+            // Emoji picker'ı gizle
+            picker.style.display = 'none';
+        });
+
+        // Emoji butonuna tıklandığında
+        emojiPickerBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Emoji picker'ı göster/gizle
+            if (picker.style.display === 'none') {
+                picker.style.display = 'block';
+            } else {
+                picker.style.display = 'none';
+            }
+        });
+
+        // Sayfa herhangi bir yerine tıklandığında emoji picker'ı kapat
+        document.addEventListener('click', (e) => {
+            if (e.target !== emojiPickerBtn && !picker.contains(e.target)) {
+                picker.style.display = 'none';
+            }
+        });
+    </script>
+    <script>
+    // Video hata yönetimi
+    function handleVideoError(video) {
+        console.error('Video yükleme hatası:', video.error);
+        showToast('Video yükleme hatası oluştu, yeniden bağlanılıyor...', 3000);
+        cleanupCurrentConnection();
+        setTimeout(() => socket.emit('ready', roomId), 2000);
+    }
+
+    // Video takılma durumu
+    function handleVideoStalled(video) {
+        console.warn('Video takıldı, buffer yönetimi yapılıyor...');
+        // Buffer boyutunu artır
+        video.buffered = Math.min(video.buffered + 2, 10);
+        // Kaliteyi düşür
+        adjustVideoQuality('LOW');
+    }
+
+    // Video bekleme durumu
+    function handleVideoWaiting(video) {
+        console.warn('Video bekliyor, kalite düşürülüyor...');
+        // Video kalitesini düşür
+        adjustVideoQuality('LOW');
+    }
+
+    // Video oynatılmaya hazır olduğunda
+    function handleVideoCanPlay(video) {
+        console.log('Video oynatılmaya hazır');
+        // Buffer boyutunu optimize et
+        video.buffered = bufferSize;
+        // Otomatik oynatmayı başlat
+        video.play().catch(e => console.error('Video oynatma hatası:', e));
+    }
+
+    // Video oynatılmaya başladığında
+    function handleVideoPlaying(video) {
+        console.log('Video oynatılıyor');
+        // Buffer boyutunu optimize et
+        video.buffered = bufferSize;
+    }
+
+    // Video duraklatıldığında
+    function handleVideoPause(video) {
+        console.log('Video duraklatıldı');
+        // Buffer boyutunu artır
+        video.buffered = Math.min(video.buffered + 2, 10);
+    }
+
+    // Video bittiğinde
+    function handleVideoEnded(video) {
+        console.log('Video bitti');
+        // Yeniden bağlanmayı dene
+        cleanupCurrentConnection();
+        setTimeout(() => socket.emit('ready', roomId), 2000);
+    }
+    </script>
+    <!-- Performance Monitor -->
+    <div id="performanceMonitor" class="fixed bottom-4 right-4 z-50">
+        <button id="togglePerformanceBtn" class="bg-gray-800 hover:bg-gray-700 text-white p-2 rounded-full shadow-lg transition-all duration-300">
+            <i class="fas fa-chart-line"></i>
+        </button>
+        <div id="performancePanel" class="hidden absolute bottom-12 right-0 w-64 bg-gray-800 rounded-lg shadow-lg p-4">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="text-sm font-semibold">Performans İzleyici</h3>
+                <button id="closePerformanceBtn" class="text-gray-400 hover:text-white">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="space-y-2 text-sm">
+                <div class="flex justify-between">
+                    <span>FPS:</span>
+                    <span id="fpsCounter">0</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Ping:</span>
+                    <span id="pingCounter">0 ms</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>CPU Kullanımı:</span>
+                    <span id="cpuUsage">0%</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Bellek Kullanımı:</span>
+                    <span id="memoryUsage">0 MB</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Bant Genişliği:</span>
+                    <span id="bandwidthUsage">0 KB/s</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html> 
