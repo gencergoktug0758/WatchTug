@@ -130,6 +130,94 @@ function hideLoadingScreen() {
     loadingScreen.classList.remove('flex');
 }
 
+// VPN Detection
+async function detectVPN() {
+    try {
+        const pc = new RTCPeerConnection({
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' }
+            ]
+        });
+
+        pc.createDataChannel('');
+
+        // Create offer ve yerel tanımlama ayarla
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        let vpnDetected = false;
+        let publicIP = '';
+        let localIP = '';
+
+        // IP adreslerini topla
+        pc.onicecandidate = (event) => {
+            if (!event.candidate) {
+                pc.close();
+                if (publicIP && localIP) {
+                    // IP adresleri arasında belirgin fark varsa VPN kullanılıyor olabilir
+                    const publicIPParts = publicIP.split('.');
+                    const localIPParts = localIP.split('.');
+                    
+                    // İlk iki oktet farklıysa muhtemelen VPN kullanılıyor
+                    if (publicIPParts[0] !== localIPParts[0] || publicIPParts[1] !== localIPParts[1]) {
+                        vpnDetected = true;
+                    }
+                }
+                if (vpnDetected) {
+                    showVpnAlert();
+                }
+            } else {
+                const ipRegex = /([0-9]{1,3}(\.[0-9]{1,3}){3})/;
+                const ipMatch = ipRegex.exec(event.candidate.candidate);
+                if (ipMatch) {
+                    const ip = ipMatch[1];
+                    if (ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.')) {
+                        localIP = ip;
+                    } else {
+                        publicIP = ip;
+                    }
+                }
+            }
+        };
+
+    } catch (err) {
+        console.error('VPN detection error:', err);
+    }
+}
+
+// VPN Alert functionality
+const vpnAlert = document.getElementById('vpnAlert');
+const vpnAlertDesktop = document.getElementById('vpnAlertDesktop');
+const closeVpnAlert = document.getElementById('closeVpnAlert');
+const closeVpnAlertDesktop = document.getElementById('closeVpnAlertDesktop');
+
+function showVpnAlert() {
+    vpnAlert.classList.remove('translate-x-full', 'opacity-0');
+    vpnAlertDesktop.classList.remove('translate-x-full', 'opacity-0');
+    vpnAlert.classList.add('opacity-100');
+    vpnAlertDesktop.classList.add('opacity-100');
+}
+
+function hideVpnAlert() {
+    vpnAlert.classList.remove('opacity-100');
+    vpnAlertDesktop.classList.remove('opacity-100');
+    vpnAlert.classList.add('opacity-0');
+    vpnAlertDesktop.classList.add('opacity-0');
+    vpnAlert.classList.add('translate-x-full');
+    vpnAlertDesktop.classList.add('translate-x-full');
+}
+
+// Sayfa yüklendiğinde VPN kontrolü yap
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        detectVPN(); // VPN tespitini aktif et
+    }, 1000);
+});
+
+// Close button event listeners
+closeVpnAlert.addEventListener('click', hideVpnAlert);
+closeVpnAlertDesktop.addEventListener('click', hideVpnAlert);
+
 // Initialize
 function init() {
     debug('Ana sayfa başlatılıyor...');

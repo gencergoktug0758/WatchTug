@@ -339,18 +339,79 @@
 <body class="font-sans bg-gradient-to-br from-gray-900 to-primary-900 text-white min-h-screen">
     <div class="container mx-auto px-4 py-8 flex flex-col min-h-screen">
         <!-- Header -->
-        <header class="flex flex-col md:flex-row justify-between items-center py-4">
-            <div class="logo flex items-center mb-4 md:mb-0">
-                <i class="fas fa-tv text-primary-500 text-4xl mr-3"></i>
-                <h1 class="text-3xl font-bold tracking-tight">WatchTug<span class="text-primary-500">V2</span></h1>
+        <header class="flex flex-col w-full">
+            <!-- Logo and Navigation -->
+            <div class="flex flex-col md:flex-row justify-between items-center py-4">
+                <div class="logo flex items-center mb-4 md:mb-0">
+                    <i class="fas fa-tv text-primary-500 text-4xl mr-3"></i>
+                    <h1 class="text-3xl font-bold tracking-tight">WatchTug<span class="text-primary-500">V2</span></h1>
+                </div>
+                <nav class="w-full md:w-auto">
+                    <ul class="flex justify-center md:justify-end space-x-6">
+                        <li><a href="#" id="aboutButton" class="text-lg hover:text-primary-400 transition-colors"><i class="fas fa-info-circle mr-1"></i> Hakkında</a></li>
+                        <li><a href="#" id="helpButton" class="text-lg hover:text-primary-400 transition-colors"><i class="fas fa-question-circle mr-1"></i> Yardım</a></li>
+                    </ul>
+                </nav>
             </div>
-            <nav>
-                <ul class="flex space-x-6">
-                    <li><a href="#" id="aboutButton" class="text-lg hover:text-primary-400 transition-colors"><i class="fas fa-info-circle mr-1"></i> Hakkında</a></li>
-                    <li><a href="#" id="helpButton" class="text-lg hover:text-primary-400 transition-colors"><i class="fas fa-question-circle mr-1"></i> Yardım</a></li>
-                </ul>
-            </nav>
+
+            <!-- Mobile VPN Alert -->
+            <div id="vpnAlert" class="block md:hidden w-full bg-black/80 backdrop-blur-sm rounded-lg shadow-xl p-4 mb-4 transform translate-x-full opacity-0 transition-all duration-500 ease-in-out border-l-4 border-yellow-500">
+                <div class="flex items-start space-x-3">
+                    <div class="flex-shrink-0 mt-0.5">
+                        <i class="fas fa-exclamation-triangle text-yellow-500 text-xl"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-bold text-yellow-500 mb-1 tracking-wide uppercase">
+                            VPN Tespit Edildi
+                        </p>
+                        <div class="space-y-1">
+                            <p class="text-sm text-white leading-relaxed">
+                                VPN kullanımı ekran paylaşımında görüntü kaybına neden olabilir.
+                            </p>
+                            <p class="text-xs text-gray-300 leading-relaxed">
+                                Görüntü alamadığınız durumda, lütfen:
+                                <span class="block mt-1 ml-2 text-yellow-400">→ VPN bağlantınızı kapatın</span>
+                                <span class="block ml-2 text-yellow-400">→ Odaya tekrar katılmayı deneyin</span>
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex-shrink-0">
+                        <button id="closeVpnAlert" class="text-gray-400 hover:text-white focus:outline-none transition-colors">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
         </header>
+
+        <!-- Desktop VPN Alert -->
+        <div id="vpnAlertDesktop" class="hidden md:block w-full max-w-2xl mx-auto mb-6 bg-black/80 backdrop-blur-sm rounded-lg shadow-xl p-4 transform translate-x-full opacity-0 transition-all duration-500 ease-in-out border-l-4 border-yellow-500">
+            <div class="flex items-start space-x-3">
+                <div class="flex-shrink-0 mt-0.5">
+                    <i class="fas fa-exclamation-triangle text-yellow-500 text-2xl"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-base font-bold text-yellow-500 mb-2 tracking-wide uppercase">
+                        VPN Tespit Edildi
+                    </p>
+                    <div class="space-y-2">
+                        <p class="text-sm text-white leading-relaxed">
+                            VPN kullanımı ekran paylaşımında görüntü kaybına neden olabilir.
+                        </p>
+                        <p class="text-sm text-gray-300 leading-relaxed">
+                            Görüntü alamadığınız durumda, lütfen:
+                            <span class="block mt-1 ml-3 text-yellow-400">→ VPN bağlantınızı kapatın</span>
+                            <span class="block ml-3 text-yellow-400">→ Odaya tekrar katılmayı deneyin</span>
+                        </p>
+                    </div>
+                </div>
+                <div class="flex-shrink-0">
+                    <button id="closeVpnAlertDesktop" class="text-gray-400 hover:text-white focus:outline-none transition-colors">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
 
         <!-- Main Content -->
         <main class="flex-grow flex flex-col md:flex-row items-center justify-center py-8 md:py-16 gap-8">
@@ -652,7 +713,7 @@
         <div class="video-container" id="videoContainer">
             <video id="localVideo" autoplay muted playsinline></video>
         </div>
-
+    </div>
 
     <!-- Scripts -->
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
