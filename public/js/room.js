@@ -32,6 +32,7 @@ const muteBtn = document.getElementById('muteBtn');
 const theaterModeBtn = document.getElementById('theaterModeBtn');
 const fullscreenBtn = document.getElementById('fullscreenBtn');
 const videoControls = document.querySelector('.video-controls');
+const micBtn = document.getElementById('micBtn');
 
 // Variables
 let roomId = null;
@@ -47,8 +48,10 @@ let isConnectedToServer = false;
 let reconnectAttempts = 0;
 let currentSharer = null;
 let isMuted = false;
+let isMicMuted = true;
 let isTheaterMode = false;
 let isFullscreen = false;
+let localAudioStream = null;
 let notificationTimeout = null;
 let lastDisconnectTime = 0;
 let hasJoinedBefore = false;
@@ -553,7 +556,7 @@ async function initializeCall() {
 // Ekran paylaşımını durdur
 async function stopSharing() {
     debug('Ekran paylaşımı durduruluyor...');
-    
+
     if (screenStream) {
         // Ekran paylaşımını kapat
         screenStream.getTracks().forEach(track => track.stop());
@@ -561,17 +564,11 @@ async function stopSharing() {
     }
     
     try {
-        // Kamera ve mikrofona geri dön
-        localStream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: true
-        });
-        
         // Update UI
         waitingScreen.classList.remove('hidden');
         sharingControls.classList.add('hidden');
         isScreenSharing = false;
-        
+
         // Sunucuya ekran paylaşımını durduğumuzu bildir
         socket.emit('stop-sharing', roomId);
         
@@ -581,7 +578,7 @@ async function stopSharing() {
             
             // Arayüzü güncelle
             screenDisplay.srcObject = null;
-            
+
             // Kullanıcı listesini güncelle
             const userElement = document.getElementById(`user-${socketId}`);
             if (userElement) {
@@ -593,7 +590,7 @@ async function stopSharing() {
             }
         }
         
-        // Mevcut tüm bağlantıları kapat ve yeniden oluştur
+        // Mevcut tüm bağlantıları kapat
         Object.keys(peerConnections).forEach(peerId => {
             if (peerConnections[peerId]) {
                 peerConnections[peerId].close();
@@ -601,10 +598,13 @@ async function stopSharing() {
             }
         });
         
+        // Peer bağlantılarını temizle
+        peerConnections = {};
+        
         showToast('Ekran paylaşımı durduruldu');
     } catch (error) {
-        debug('Kamera erişimi sağlanamadı:', error);
-        showToast('Kamera erişimi sağlanamadı');
+        debug('Ekran paylaşımı durdurulurken hata:', error);
+        showToast('Ekran paylaşımı durdurulurken bir hata oluştu');
     }
 }
 
@@ -1128,6 +1128,17 @@ function setupSocketEvents() {
                 debug('ICE candidate başarıyla eklendi');
             } catch (error) {
                 debug('ICE candidate eklenirken hata:', error);
+            }
+        }
+    });
+
+    // Mikrofon durumu değiştiğinde
+    socket.on('mic-status-changed', (data) => {
+        const userElement = document.getElementById(`user-${data.userId}`);
+        if (userElement) {
+            const micIcon = userElement.querySelector('.mic-status');
+            if (micIcon) {
+                micIcon.className = `mic-status fas fa-microphone${data.isMuted ? '-slash text-red-500' : ' text-green-500'} ml-2`;
             }
         }
     });
@@ -1760,6 +1771,11 @@ function setupEventListeners() {
     
     // Close toast
     closeToast.addEventListener('click', hideToast);
+
+    // Mikrofon butonu
+    if (micBtn) {
+        micBtn.addEventListener('click', toggleMicrophone);
+    }
 }
 
 // Odaya katılma işlevi
@@ -1856,6 +1872,47 @@ function sendChatMessage(message) {
         message: message,
         timestamp: new Date(),
         isSystem: false
+    });
+}
+
+// Mikrofon stream'ini başlat
+async function initMicrophone() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        localAudioStream = stream;
+        debug('Mikrofon başarıyla başlatıldı');
+        return true;
+    } catch (error) {
+        debug('Mikrofon başlatma hatası:', error);
+        showToast('Mikrofon erişimi reddedildi veya bir hata oluştu.', 3000);
+        return false;
+    }
+}
+
+// Mikrofon durumunu değiştir
+async function toggleMicrophone() {
+    if (!localAudioStream) {
+        const success = await initMicrophone();
+        if (!success) return;
+    }
+
+    isMicMuted = !isMicMuted;
+    localAudioStream.getAudioTracks().forEach(track => {
+        track.enabled = !isMicMuted;
+    });
+
+    // Mikrofon ikonunu güncelle
+    const micIcon = micBtn.querySelector('i');
+    if (isMicMuted) {
+        micIcon.className = 'fas fa-microphone-slash text-red-500';
+    } else {
+        micIcon.className = 'fas fa-microphone text-green-500';
+    }
+
+    // Diğer kullanıcılara mikrofon durumunu bildir
+    socket.emit('mic-status', {
+        roomId: roomId,
+        isMuted: isMicMuted
     });
 }
 

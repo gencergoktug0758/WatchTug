@@ -642,7 +642,10 @@
                         
                         <!-- Video Kontrolleri -->
                         <div class="video-controls">
-                            <button id="muteBtn" class="video-control-btn" title="Sessiz (M)">
+                            <button id="micBtn" class="video-control-btn" title="Mikrofon (M)">
+                                <i class="fas fa-microphone-slash text-red-500"></i>
+                            </button>
+                            <button id="muteBtn" class="video-control-btn" title="Sessiz (S)">
                                 <i class="fas fa-volume-up"></i>
                             </button>
                             <div class="volume-control">
@@ -662,12 +665,20 @@
             
             <!-- Sağ Panel - Kullanıcılar ve Sohbet -->
             <div class="lg:w-1/4 flex flex-col gap-4" id="chatContainer">
-                <!-- Kullanıcılar Paneli -->
-                <div class="bg-black/30 rounded-lg shadow-lg p-3 flex-shrink-0">
+                <!-- Kullanıcılar -->
+                <div class="bg-black/30 rounded-lg shadow-lg p-4">
                     <h2 class="text-xl font-semibold mb-3">Kullanıcılar</h2>
                     <div id="usersContainer" class="space-y-2">
-                        <!-- Kullanıcılar buraya dinamik olarak eklenecek -->
-                        <div class="text-gray-500 text-center">Kullanıcılar yükleniyor...</div>
+                        <template id="userItemTemplate">
+                            <div class="user-item">
+                                <div class="user-avatar"></div>
+                                <span class="user-name"></span>
+                                <i class="mic-status fas fa-microphone-slash text-red-500 ml-2"></i>
+                                <span class="sharing-badge hidden ml-2">
+                                    <i class="fas fa-desktop text-primary-400"></i>
+                                </span>
+                            </div>
+                        </template>
                     </div>
                 </div>
                 
