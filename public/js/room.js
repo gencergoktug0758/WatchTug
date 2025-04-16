@@ -111,6 +111,37 @@ let bandwidthStats = { bytesReceived: 0, lastUpdate: 0 };
 let cpuUsage = 0;
 let memoryUsage = 0;
 
+// Mikrofon durumu
+let isMicEnabled = false;
+let micStream = null;
+
+// Ses yönetimi için değişkenler
+let audioContext = null;
+let audioStreams = new Map(); // Kullanıcı ID'lerine göre ses akışlarını saklar
+
+// Ses bağlamını başlat
+function initAudioContext() {
+    if (!audioContext) {
+        audioContext = new AudioContext();
+    }
+}
+
+// Ses akışını işle
+function handleAudioStream(stream, userId) {
+    initAudioContext();
+    
+    // Ses akışını kaydet
+    audioStreams.set(userId, stream);
+    
+    // Ses akışını işle
+    const source = audioContext.createMediaStreamSource(stream);
+    const gainNode = audioContext.createGain();
+    gainNode.gain.value = 1.0;
+    
+    source.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+}
+
 function updatePerformanceStats() {
     // FPS Calculation - Daha doğru FPS hesaplama
     const currentTime = performance.now();
@@ -608,7 +639,7 @@ async function stopSharing() {
     }
 }
 
-// Create a new RTCPeerConnection
+// Peer bağlantısı oluşturma fonksiyonu
 function createPeerConnection(peerId) {
     debug(`Peer bağlantısı oluşturuluyor: ${peerId}`);
     
@@ -619,6 +650,35 @@ function createPeerConnection(peerId) {
     }
     
     const peerConnection = new RTCPeerConnection(iceServers);
+    
+    // Track event - receiving remote stream
+    peerConnection.ontrack = (event) => {
+        debug(`${peerId} kullanıcısından medya track alındı:`, event.track.kind);
+        
+        if (event.track.kind === 'audio') {
+            // Ses track'i için özel işlem
+            const audioElement = document.createElement('audio');
+            audioElement.autoplay = true;
+            audioElement.srcObject = new MediaStream([event.track]);
+            document.body.appendChild(audioElement);
+        } else {
+            // Video track'i için mevcut işlem
+            if (!screenDisplay.srcObject) {
+                screenDisplay.srcObject = new MediaStream();
+            }
+            screenDisplay.srcObject.addTrack(event.track);
+        }
+    };
+    
+    // Mikrofon akışını ekle
+    if (isMicEnabled && micStream) {
+        micStream.getTracks().forEach(track => {
+            if (track.kind === 'audio') {
+                const sender = peerConnection.addTrack(track, micStream);
+                debug(`Ses gönderici oluşturuldu:`, sender);
+            }
+        });
+    }
     
     // ICE candidate event
     peerConnection.onicecandidate = (event) => {
@@ -906,9 +966,9 @@ function setupSocketEvents() {
     
     // Room joined event
     socket.on('room-joined', (data) => {
-        debug('Odaya katılındı:', data);
+        debug('Odaya katıldı:', data);
         roomId = data.roomId;
-        socketId = socket.id; // Socket ID'yi kaydet
+        socketId = socket.id;
         localStorage.setItem('watchtug_room', roomId);
         
         // Update room ID display
@@ -917,15 +977,13 @@ function setupSocketEvents() {
         // Update users list
         if (data.users && Array.isArray(data.users)) {
             updateUsersList(data.users);
-        } else {
-            debug('Kullanıcı listesi alınamadı!', data);
-            updateUsersList([]);
         }
         
         // Eğer odada aktif bir yayıncı varsa
         if (data.currentSharer) {
             debug(`Odada aktif bir yayıncı var: ${data.currentSharer}`);
             currentSharer = data.currentSharer;
+            waitingScreen.classList.add('hidden');
             
             // Yayıncıya hazır olduğumuzu bildir
             socket.emit('ready', { 
@@ -943,7 +1001,7 @@ function setupSocketEvents() {
     socket.on('user-joined', (user) => {
         debug('Kullanıcı odaya katıldı:', user);
         
-        // Add user to the list (if not already in the list)
+        // Kullanıcı zaten listede var mı kontrol et
         const existingUser = document.getElementById(`user-${user.id}`);
         if (!existingUser) {
             const usersList = Array.from(usersContainer.children)
@@ -961,24 +1019,31 @@ function setupSocketEvents() {
                 debug(`Yeni kullanıcıya (${user.id}) ekran paylaşımı gönderiliyor`);
                 setTimeout(() => {
                     createPeerConnectionAndOffer(user.id);
-                }, 1000); // Kısa bir gecikme ekleyerek bağlantının kurulmasını bekle
+                }, 1000);
             }
         }
     });
     
     // User disconnected event
     socket.on('user-disconnected', (userId) => {
-        debug('Kullanıcı bağlantısı kesildi:', userId);
+        debug('Kullanıcı ayrıldı:', userId);
         
-        // Clean up peer connection
-        cleanupPeerConnection(userId);
-        
-        // Remove user from the list
+        // Kullanıcıyı listeden kaldır
         const userElement = document.getElementById(`user-${userId}`);
         if (userElement) {
             userElement.remove();
             
-            // If no more users, show empty message
+            // Eğer ayrılan kullanıcı yayın yapıyorsa
+            if (currentSharer === userId) {
+                currentSharer = null;
+                waitingScreen.classList.remove('hidden');
+                screenDisplay.srcObject = null;
+            }
+            
+            // Peer bağlantısını temizle
+            cleanupPeerConnection(userId);
+            
+            // Kullanıcı listesi boşsa mesaj göster
             if (usersContainer.children.length === 0) {
                 updateUsersList([]);
             }
@@ -1132,13 +1197,45 @@ function setupSocketEvents() {
         }
     });
 
-    // Mikrofon durumu değiştiğinde
+    // Mikrofon durumu
     socket.on('mic-status-changed', (data) => {
         const userElement = document.getElementById(`user-${data.userId}`);
         if (userElement) {
             const micIcon = userElement.querySelector('.mic-status');
             if (micIcon) {
-                micIcon.className = `mic-status fas fa-microphone${data.isMuted ? '-slash text-red-500' : ' text-green-500'} ml-2`;
+                if (data.isMuted) {
+                    micIcon.classList.remove('fa-microphone', 'text-green-500');
+                    micIcon.classList.add('fa-microphone-slash', 'text-red-500');
+                } else {
+                    micIcon.classList.remove('fa-microphone-slash', 'text-red-500');
+                    micIcon.classList.add('fa-microphone', 'text-green-500');
+                }
+            }
+        }
+    });
+    
+    // Force leave event
+    socket.on('force-leave', (data) => {
+        debug('Kullanıcı zorla ayrıldı:', data);
+        
+        // Kullanıcıyı listeden kaldır
+        const userElement = document.getElementById(`user-${data.userId}`);
+        if (userElement) {
+            userElement.remove();
+            
+            // Eğer ayrılan kullanıcı yayın yapıyorsa
+            if (currentSharer === data.userId) {
+                currentSharer = null;
+                waitingScreen.classList.remove('hidden');
+                screenDisplay.srcObject = null;
+            }
+            
+            // Peer bağlantısını temizle
+            cleanupPeerConnection(data.userId);
+            
+            // Kullanıcı listesi boşsa mesaj göster
+            if (usersContainer.children.length === 0) {
+                updateUsersList([]);
             }
         }
     });
@@ -1774,8 +1871,26 @@ function setupEventListeners() {
 
     // Mikrofon butonu
     if (micBtn) {
-        micBtn.addEventListener('click', toggleMicrophone);
+        micBtn.addEventListener('click', async () => {
+            if (!isMicEnabled) {
+                await initMicrophone();
+            } else {
+                stopMicrophone();
+            }
+        });
     }
+    
+    // Sayfa kapatıldığında veya yenilendiğinde
+    window.addEventListener('beforeunload', () => {
+        if (socket) {
+            socket.emit('force-leave', {
+                roomId: roomId,
+                userId: socketId,
+                username: username
+            });
+            socket.disconnect();
+        }
+    });
 }
 
 // Odaya katılma işlevi
@@ -1875,45 +1990,137 @@ function sendChatMessage(message) {
     });
 }
 
-// Mikrofon stream'ini başlat
+// Mikrofonu başlat
 async function initMicrophone() {
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        localAudioStream = stream;
-        debug('Mikrofon başarıyla başlatıldı');
-        return true;
+        micStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            }
+        });
+        
+        // Mikrofon durumunu güncelle
+        isMicEnabled = true;
+        updateMicButton();
+        
+        // Mikrofon akışını tüm peer bağlantılarına ekle
+        Object.keys(peerConnections).forEach(peerId => {
+            if (peerConnections[peerId]) {
+                micStream.getTracks().forEach(track => {
+                    if (track.kind === 'audio') {
+                        const sender = peerConnections[peerId].addTrack(track, micStream);
+                        debug(`Ses gönderici oluşturuldu:`, sender);
+                    }
+                });
+            }
+        });
+        
+        // Sunucuya mikrofon durumunu bildir
+        socket.emit('mic-status', {
+            roomId: roomId,
+            isMuted: false
+        });
+        
+        showToast('Mikrofon açıldı');
     } catch (error) {
-        debug('Mikrofon başlatma hatası:', error);
-        showToast('Mikrofon erişimi reddedildi veya bir hata oluştu.', 3000);
-        return false;
+        console.error('Mikrofon başlatılamadı:', error);
+        showToast('Mikrofon başlatılamadı');
     }
 }
 
-// Mikrofon durumunu değiştir
-async function toggleMicrophone() {
-    if (!localAudioStream) {
-        const success = await initMicrophone();
-        if (!success) return;
+// Mikrofonu kapat
+function stopMicrophone() {
+    if (micStream) {
+        micStream.getTracks().forEach(track => track.stop());
+        micStream = null;
     }
-
-    isMicMuted = !isMicMuted;
-    localAudioStream.getAudioTracks().forEach(track => {
-        track.enabled = !isMicMuted;
+    
+    // Tüm peer bağlantılarından ses göndericilerini kaldır
+    Object.keys(peerConnections).forEach(peerId => {
+        if (peerConnections[peerId]) {
+            const senders = peerConnections[peerId].getSenders();
+            senders.forEach(sender => {
+                if (sender.track && sender.track.kind === 'audio') {
+                    peerConnections[peerId].removeTrack(sender);
+                }
+            });
+        }
     });
-
-    // Mikrofon ikonunu güncelle
-    const micIcon = micBtn.querySelector('i');
-    if (isMicMuted) {
-        micIcon.className = 'fas fa-microphone-slash text-red-500';
-    } else {
-        micIcon.className = 'fas fa-microphone text-green-500';
-    }
-
-    // Diğer kullanıcılara mikrofon durumunu bildir
+    
+    isMicEnabled = false;
+    updateMicButton();
+    
+    // Sunucuya mikrofon durumunu bildir
     socket.emit('mic-status', {
         roomId: roomId,
-        isMuted: isMicMuted
+        isMuted: true
     });
+    
+    showToast('Mikrofon kapatıldı');
+}
+
+// Mikrofon düğmesini güncelle
+function updateMicButton() {
+    const micBtn = document.getElementById('micBtn');
+    if (micBtn) {
+        micBtn.style.display = 'none'; // Mikrofon butonunu gizle
+    }
+}
+
+// Leave room function
+function leaveRoom() {
+    debug('Odadan ayrılıyor...');
+    
+    // Ekran paylaşımı yapıyorsak durdur
+    if (isScreenSharing) {
+        stopSharing();
+    }
+    
+    // Tüm peer bağlantılarını temizle
+    Object.keys(peerConnections).forEach(peerId => {
+        cleanupPeerConnection(peerId);
+    });
+    
+    // Socket bağlantısını kapat
+    if (socket) {
+        socket.emit('leave-room', {
+            roomId: roomId,
+            userId: socketId,
+            username: username
+        });
+        socket.disconnect();
+    }
+    
+    // Local storage'ı temizle
+    localStorage.removeItem('watchtug_room');
+    
+    // Ana sayfaya yönlendir
+    window.location.href = '/';
+}
+
+// Clean up peer connection
+function cleanupPeerConnection(peerId) {
+    debug(`Peer bağlantısı temizleniyor: ${peerId}`);
+    
+    if (peerConnections[peerId]) {
+        try {
+            peerConnections[peerId].close();
+        } catch (e) {
+            debug('Peer bağlantısı kapatılırken hata:', e);
+        }
+        delete peerConnections[peerId];
+        
+        // Eğer bu kullanıcı yayın yapıyorsa, video ekranını temizle
+        if (currentSharer === peerId) {
+            if (screenDisplay) {
+                screenDisplay.srcObject = null;
+            }
+            waitingScreen.classList.remove('hidden');
+            currentSharer = null;
+        }
+    }
 }
 
 // Initialize on DOM load
