@@ -148,21 +148,26 @@ async function detectVPN() {
         let vpnDetected = false;
         let publicIP = '';
         let localIP = '';
+        let privateIPCount = 0;
+        let publicIPCount = 0;
 
         // IP adreslerini topla
         pc.onicecandidate = (event) => {
             if (!event.candidate) {
                 pc.close();
-                if (publicIP && localIP) {
-                    // IP adresleri arasında belirgin fark varsa VPN kullanılıyor olabilir
-                    const publicIPParts = publicIP.split('.');
-                    const localIPParts = localIP.split('.');
-                    
-                    // İlk iki oktet farklıysa muhtemelen VPN kullanılıyor
-                    if (publicIPParts[0] !== localIPParts[0] || publicIPParts[1] !== localIPParts[1]) {
-                        vpnDetected = true;
-                    }
+                // Eğer çok fazla private IP varsa muhtemelen VPN değildir
+                if (privateIPCount > 2) {
+                    vpnDetected = false;
                 }
+                // Eğer birden fazla public IP varsa muhtemelen VPN'dir
+                else if (publicIPCount > 1) {
+                    vpnDetected = true;
+                }
+                // Normal durumlarda VPN uyarısını gösterme
+                else {
+                    vpnDetected = false;
+                }
+                
                 if (vpnDetected) {
                     showVpnAlert();
                 }
@@ -171,9 +176,12 @@ async function detectVPN() {
                 const ipMatch = ipRegex.exec(event.candidate.candidate);
                 if (ipMatch) {
                     const ip = ipMatch[1];
-                    if (ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.')) {
+                    if (ip.startsWith('192.168.') || ip.startsWith('10.') || 
+                        (ip.startsWith('172.') && parseInt(ip.split('.')[1]) >= 16 && parseInt(ip.split('.')[1]) <= 31)) {
+                        privateIPCount++;
                         localIP = ip;
-                    } else {
+                    } else if (!ip.startsWith('127.') && !ip.startsWith('169.254.')) {
+                        publicIPCount++;
                         publicIP = ip;
                     }
                 }
