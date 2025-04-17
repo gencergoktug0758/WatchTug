@@ -130,67 +130,238 @@ function hideLoadingScreen() {
     loadingScreen.classList.remove('flex');
 }
 
-// VPN Detection
+// VPN Detection için gelişmiş ve çok faktörlü analiz
 async function detectVPN() {
     try {
+        // Sonuçları saklamak için obje
+        const vpnScores = {
+            multiplePublicIPs: 0,
+            rtcDelayAnomaly: 0,
+            knownVpnPorts: 0,
+            dnsLeakCheck: 0,
+            locationMismatch: 0,
+            totalScore: 0,
+            threshold: 65, // %65 ve üzeri VPN olarak değerlendirilir
+            confidenceLevel: 0
+        };
+        
+        // 1. WebRTC analizi
         const pc = new RTCPeerConnection({
             iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' }
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:stun4.l.google.com:19302' }
             ]
         });
 
         pc.createDataChannel('');
 
+        // Zaman ölçümü başlat
+        const rtcStartTime = performance.now();
+        
         // Create offer ve yerel tanımlama ayarla
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
-        let vpnDetected = false;
-        let publicIP = '';
-        let localIP = '';
-        let privateIPCount = 0;
-        let publicIPCount = 0;
-
-        // IP adreslerini topla
-        pc.onicecandidate = (event) => {
-            if (!event.candidate) {
-                pc.close();
-                // Eğer çok fazla private IP varsa muhtemelen VPN değildir
-                if (privateIPCount > 2) {
-                    vpnDetected = false;
-                }
-                // Eğer birden fazla public IP varsa muhtemelen VPN'dir
-                else if (publicIPCount > 1) {
-                    vpnDetected = true;
-                }
-                // Normal durumlarda VPN uyarısını gösterme
-                else {
-                    vpnDetected = false;
-                }
-                
-                if (vpnDetected) {
-                    showVpnAlert();
-                }
-            } else {
-                const ipRegex = /([0-9]{1,3}(\.[0-9]{1,3}){3})/;
-                const ipMatch = ipRegex.exec(event.candidate.candidate);
-                if (ipMatch) {
-                    const ip = ipMatch[1];
-                    if (ip.startsWith('192.168.') || ip.startsWith('10.') || 
-                        (ip.startsWith('172.') && parseInt(ip.split('.')[1]) >= 16 && parseInt(ip.split('.')[1]) <= 31)) {
-                        privateIPCount++;
-                        localIP = ip;
-                    } else if (!ip.startsWith('127.') && !ip.startsWith('169.254.')) {
-                        publicIPCount++;
-                        publicIP = ip;
-                    }
-                }
-            }
+        let publicIPs = new Set();
+        let privateIPs = new Set();
+        let candidateTypeCounts = {
+            host: 0,
+            srflx: 0,
+            prflx: 0,
+            relay: 0
         };
+        
+        // Toplam STUN yanıt sürelerini ölçme
+        let responseCount = 0;
+        let totalResponseTime = 0;
+
+        return new Promise((resolve) => {
+            // 10 saniye timeout - sonuç alınamazsa
+            const timeoutId = setTimeout(() => {
+                pc.close();
+                
+                // Zaman aşımında orta seviye güven ile sonuç döndür
+                vpnScores.totalScore = 40;
+                vpnScores.confidenceLevel = 50;
+                
+                const isVpn = vpnScores.totalScore >= vpnScores.threshold;
+                resolve({ 
+                    vpnDetected: isVpn, 
+                    scores: vpnScores,
+                    confidence: vpnScores.confidenceLevel
+                });
+                
+            }, 10000);
+            
+            // IP adreslerini topla
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    responseCount++;
+                    const currentTime = performance.now();
+                    totalResponseTime += (currentTime - rtcStartTime);
+                    
+                    // Aday türünü say
+                    const candidateTypeMatch = /typ ([a-z]+)/.exec(event.candidate.candidate);
+                    if (candidateTypeMatch && candidateTypeMatch[1]) {
+                        candidateTypeCounts[candidateTypeMatch[1]]++;
+                    }
+                    
+                    // IP adresini izole et
+                    const ipRegex = /([0-9]{1,3}(\.[0-9]{1,3}){3})/;
+                    const ipMatch = ipRegex.exec(event.candidate.candidate);
+                    
+                    if (ipMatch) {
+                        const ip = ipMatch[1];
+                        
+                        // Port tespiti (VPN'ler genellikle belli portlar kullanır)
+                        const portRegex = / ([0-9]{2,5}) /;
+                        const portMatch = portRegex.exec(event.candidate.candidate);
+                        
+                        if (portMatch) {
+                            const port = parseInt(portMatch[1]);
+                            // VPN'lerin sıklıkla kullandığı portları kontrol et
+                            const vpnCommonPorts = [500, 1194, 1701, 1723, 4500, 8080, 443, 80];
+                            if (vpnCommonPorts.includes(port)) {
+                                vpnScores.knownVpnPorts += 15;
+                            }
+                        }
+                        
+                        // IP türünü belirle (özel veya genel)
+                        if (ip.startsWith('10.') || 
+                            ip.startsWith('192.168.') || 
+                            (ip.startsWith('172.') && parseInt(ip.split('.')[1]) >= 16 && parseInt(ip.split('.')[1]) <= 31) ||
+                            ip.startsWith('169.254.') || 
+                            ip.startsWith('127.')) {
+                            privateIPs.add(ip);
+                        } else {
+                            publicIPs.add(ip);
+                        }
+                    }
+                } else {
+                    // Tüm adaylar toplandı, analiz et
+                    clearTimeout(timeoutId);
+                    pc.close();
+                    
+                    // 1. Birden çok Public IP puanlaması
+                    if (publicIPs.size > 1) {
+                        vpnScores.multiplePublicIPs = 40;
+                    } else if (publicIPs.size == 1 && privateIPs.size == 0) {
+                        // Sadece 1 public IP ve hiç private IP olmaması genelde VPN göstergesidir
+                        vpnScores.multiplePublicIPs = 30;
+                    }
+                    
+                    // 2. Yanıt süresi anomali tespiti
+                    if (responseCount > 0) {
+                        const avgResponseTime = totalResponseTime / responseCount;
+                        // Yüksek yanıt süresi genellikle bir VPN göstergesidir
+                        if (avgResponseTime > 500) {
+                            vpnScores.rtcDelayAnomaly = 20;
+                        } else if (avgResponseTime > 250) {
+                            vpnScores.rtcDelayAnomaly = 10;
+                        }
+                    }
+                    
+                    // 3. STUN aday tür dağılımı analizi
+                    // VPN kullanımında genellikle "relay" türü adaylar daha fazla olur
+                    if (candidateTypeCounts.relay > candidateTypeCounts.srflx) {
+                        vpnScores.dnsLeakCheck += 15;
+                    }
+                    
+                    // 4. Konum tutarlılık kontrolü 
+                    try {
+                        // Tarayıcının zaman dilimini kontrol et
+                        const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                        
+                        // Tarayıcı dilini kontrol et
+                        const browserLanguage = navigator.language || navigator.userLanguage;
+                        
+                        // IP tabanlı konum bilgisi için hızlı bir kontrol
+                        // Gerçek uygulamada bu kısım için API kullanmanız daha doğru olacaktır
+                        if (browserTimezone.includes('US') && browserLanguage.startsWith('tr')) {
+                            vpnScores.locationMismatch += 25;
+                        }
+                    } catch (e) {
+                        console.log('Konum kontrolü hatası:', e);
+                    }
+                    
+                    // Toplam puanı hesapla
+                    vpnScores.totalScore = 
+                        vpnScores.multiplePublicIPs + 
+                        vpnScores.rtcDelayAnomaly + 
+                        vpnScores.knownVpnPorts + 
+                        vpnScores.dnsLeakCheck + 
+                        vpnScores.locationMismatch;
+                    
+                    // Güven seviyesi - ne kadar veri toplanabildi?
+                    vpnScores.confidenceLevel = Math.min(100, 
+                        40 + // baz güven 
+                        (responseCount * 5) + // toplanan yanıt sayısı
+                        (publicIPs.size > 0 ? 20 : 0) + // en az bir IP elde edildi mi
+                        (privateIPs.size > 0 ? 10 : 0) // en az bir özel IP elde edildi mi
+                    );
+                    
+                    // Debug için puanlamayı yazdır
+                    console.log('VPN Tespit Puanları:', vpnScores);
+                    console.log('Public IPs:', [...publicIPs]);
+                    console.log('Private IPs:', [...privateIPs]);
+                    console.log('Candidate Types:', candidateTypeCounts);
+                    
+                    // Sonucu belirle
+                    const isVpn = vpnScores.totalScore >= vpnScores.threshold;
+                    
+                    // VPN tespit edilirse uyarı göster
+                    if (isVpn && vpnScores.confidenceLevel >= 70) {
+                        // Yüksek güvenle VPN tespit edildi
+                        showVpnAlert('yuksek');
+                    } else if (isVpn) {
+                        // Düşük güvenle VPN tespit edildi
+                        showVpnAlert('dusuk');
+                    }
+                    
+                    resolve({ 
+                        vpnDetected: isVpn, 
+                        scores: vpnScores,
+                        confidence: vpnScores.confidenceLevel
+                    });
+                }
+            };
+        });
 
     } catch (err) {
         console.error('VPN detection error:', err);
+        return { vpnDetected: false, scores: {}, confidence: 0 };
     }
+}
+
+// VPN Alert functionality - geliştirilmiş versiyon
+function showVpnAlert(guvenSeviyesi = 'normal') {
+    vpnAlert.classList.remove('translate-x-full', 'opacity-0');
+    vpnAlertDesktop.classList.remove('translate-x-full', 'opacity-0');
+    vpnAlert.classList.add('opacity-100');
+    vpnAlertDesktop.classList.add('opacity-100');
+    
+    // Güven seviyesine göre mesajı güncelle
+    const vpnAlertMessage = document.getElementById('vpnAlertMessage') || document.getElementById('vpnMessage');
+    const vpnAlertDesktopMessage = document.getElementById('vpnAlertDesktopMessage') || document.getElementById('vpnMessageDesktop');
+    
+    let message = '';
+    
+    if (guvenSeviyesi === 'yuksek') {
+        message = 'VPN kullanımı tespit edildi. Bu, ekran paylaşım performansını olumsuz etkileyebilir. Daha iyi bir deneyim için VPN bağlantınızı devre dışı bırakmanızı öneririz.';
+    } else if (guvenSeviyesi === 'dusuk') {
+        message = 'VPN veya proxy kullanıyor olabilirsiniz. Bu durum ekran paylaşım performansını etkileyebilir.';
+    } else {
+        message = 'VPN kullanımı tespit edildi. Ekran paylaşım performansını artırmak için VPN bağlantınızı devre dışı bırakabilirsiniz.';
+    }
+    
+    if (vpnAlertMessage) vpnAlertMessage.textContent = message;
+    if (vpnAlertDesktopMessage) vpnAlertDesktopMessage.textContent = message;
+    
+    // 15 saniye sonra otomatik kapat
+    setTimeout(hideVpnAlert, 15000);
 }
 
 // VPN Alert functionality
@@ -198,13 +369,6 @@ const vpnAlert = document.getElementById('vpnAlert');
 const vpnAlertDesktop = document.getElementById('vpnAlertDesktop');
 const closeVpnAlert = document.getElementById('closeVpnAlert');
 const closeVpnAlertDesktop = document.getElementById('closeVpnAlertDesktop');
-
-function showVpnAlert() {
-    vpnAlert.classList.remove('translate-x-full', 'opacity-0');
-    vpnAlertDesktop.classList.remove('translate-x-full', 'opacity-0');
-    vpnAlert.classList.add('opacity-100');
-    vpnAlertDesktop.classList.add('opacity-100');
-}
 
 function hideVpnAlert() {
     vpnAlert.classList.remove('opacity-100');

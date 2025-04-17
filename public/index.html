@@ -355,60 +355,41 @@
             </div>
 
             <!-- Mobile VPN Alert -->
-            <div id="vpnAlert" class="block md:hidden w-full bg-black/80 backdrop-blur-sm rounded-lg shadow-xl p-4 mb-4 transform translate-x-full opacity-0 transition-all duration-500 ease-in-out border-l-4 border-yellow-500">
-                <div class="flex items-start space-x-3">
-                    <div class="flex-shrink-0 mt-0.5">
-                        <i class="fas fa-exclamation-triangle text-yellow-500 text-xl"></i>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-sm font-bold text-yellow-500 mb-1 tracking-wide uppercase">
-                            VPN Tespit Edildi
-                        </p>
-                        <div class="space-y-1">
-                            <p class="text-sm text-white leading-relaxed">
-                                VPN kullanımı ekran paylaşımında görüntü kaybına neden olabilir.
-                            </p>
-                            <p class="text-xs text-gray-300 leading-relaxed">
-                                Görüntü alamadığınız durumda, lütfen:
-                                <span class="block mt-1 ml-2 text-yellow-400">→ VPN bağlantınızı kapatın</span>
-                                <span class="block ml-2 text-yellow-400">→ Odaya tekrar katılmayı deneyin</span>
-                            </p>
-                        </div>
-                    </div>
+            <div id="vpnAlert" class="fixed bottom-0 right-0 z-50 p-4 m-4 bg-yellow-600 text-white rounded-lg shadow-lg transform translate-x-full opacity-0 transition-all duration-300 ease-in-out">
+                <div class="flex items-start">
                     <div class="flex-shrink-0">
-                        <button id="closeVpnAlert" class="text-gray-400 hover:text-white focus:outline-none transition-colors">
-                            <i class="fas fa-times"></i>
-                        </button>
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                        </svg>
                     </div>
+                    <div class="ml-3 flex-1">
+                        <p id="vpnAlertMessage" class="text-sm font-medium">VPN kullanımı tespit edildi. Ekran paylaşım performansını artırmak için VPN bağlantınızı devre dışı bırakabilirsiniz.</p>
+                    </div>
+                    <button id="closeVpnAlert" class="ml-4 text-white hover:text-gray-200 focus:outline-none">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
                 </div>
             </div>
         </header>
 
         <!-- Desktop VPN Alert -->
-        <div id="vpnAlertDesktop" class="hidden md:block w-full max-w-2xl mx-auto mb-6 bg-black/80 backdrop-blur-sm rounded-lg shadow-xl p-4 transform translate-x-full opacity-0 transition-all duration-500 ease-in-out border-l-4 border-yellow-500">
-            <div class="flex items-start space-x-3">
-                <div class="flex-shrink-0 mt-0.5">
-                    <i class="fas fa-exclamation-triangle text-yellow-500 text-2xl"></i>
-                </div>
-                <div class="flex-1 min-w-0">
-                    <p class="text-base font-bold text-yellow-500 mb-2 tracking-wide uppercase">
-                        VPN Tespit Edildi
-                    </p>
-                    <div class="space-y-2">
-                        <p class="text-sm text-white leading-relaxed">
-                            VPN kullanımı ekran paylaşımında görüntü kaybına neden olabilir.
-                        </p>
-                        <p class="text-sm text-gray-300 leading-relaxed">
-                            Görüntü alamadığınız durumda, lütfen:
-                            <span class="block mt-1 ml-3 text-yellow-400">→ VPN bağlantınızı kapatın</span>
-                            <span class="block ml-3 text-yellow-400">→ Odaya tekrar katılmayı deneyin</span>
-                        </p>
-                    </div>
-                </div>
+        <div id="vpnAlertDesktop" class="fixed bottom-0 right-0 z-50 max-w-md p-4 m-4 bg-yellow-600 text-white rounded-lg shadow-lg transform translate-x-full opacity-0 transition-all duration-300 ease-in-out">
+            <div class="flex items-start">
                 <div class="flex-shrink-0">
-                    <button id="closeVpnAlertDesktop" class="text-gray-400 hover:text-white focus:outline-none transition-colors">
-                        <i class="fas fa-times"></i>
-                    </button>
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    </svg>
+                </div>
+                <div class="ml-3 flex-1">
+                    <h3 class="text-lg font-medium">VPN Algılandı</h3>
+                    <p id="vpnAlertDesktopMessage" class="mt-1 text-sm">VPN kullanımı tespit edildi. Ekran paylaşım performansını artırmak için VPN bağlantınızı devre dışı bırakabilirsiniz.</p>
+                    <div class="mt-2">
+                        <button id="closeVpnAlertDesktop" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-yellow-600 bg-white hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500">
+                            Anladım
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
