@@ -32,7 +32,6 @@ const muteBtn = document.getElementById('muteBtn');
 const theaterModeBtn = document.getElementById('theaterModeBtn');
 const fullscreenBtn = document.getElementById('fullscreenBtn');
 const videoControls = document.querySelector('.video-controls');
-const micBtn = document.getElementById('micBtn');
 
 // Variables
 let roomId = null;
@@ -48,10 +47,8 @@ let isConnectedToServer = false;
 let reconnectAttempts = 0;
 let currentSharer = null;
 let isMuted = false;
-let isMicMuted = true;
 let isTheaterMode = false;
 let isFullscreen = false;
-let localAudioStream = null;
 let notificationTimeout = null;
 let lastDisconnectTime = 0;
 let hasJoinedBefore = false;
@@ -110,37 +107,6 @@ let lastPingTime = 0;
 let bandwidthStats = { bytesReceived: 0, lastUpdate: 0 };
 let cpuUsage = 0;
 let memoryUsage = 0;
-
-// Mikrofon durumu
-let isMicEnabled = false;
-let micStream = null;
-
-// Ses yönetimi için değişkenler
-let audioContext = null;
-let audioStreams = new Map(); // Kullanıcı ID'lerine göre ses akışlarını saklar
-
-// Ses bağlamını başlat
-function initAudioContext() {
-    if (!audioContext) {
-        audioContext = new AudioContext();
-    }
-}
-
-// Ses akışını işle
-function handleAudioStream(stream, userId) {
-    initAudioContext();
-    
-    // Ses akışını kaydet
-    audioStreams.set(userId, stream);
-    
-    // Ses akışını işle
-    const source = audioContext.createMediaStreamSource(stream);
-    const gainNode = audioContext.createGain();
-    gainNode.gain.value = 1.0;
-    
-    source.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-}
 
 function updatePerformanceStats() {
     // FPS Calculation - Daha doğru FPS hesaplama
@@ -310,43 +276,48 @@ function updateUsersList(users) {
         return;
     }
     
-    // Tekrarlanan kullanıcıları engellemek için Set kullan
-    const uniqueUsers = new Set();
+    // Filter unique users by ID - remove duplicates
+    const uniqueUsers = [];
+    const userIds = new Set();
     
     users.forEach(user => {
-        // Kullanıcı ID'sini kontrol et
-        if (!uniqueUsers.has(user.id)) {
-            uniqueUsers.add(user.id);
-            
-            const userElement = document.createElement('div');
-            userElement.id = `user-${user.id}`;
-            userElement.className = `user-item ${user.id === socketId ? 'self' : ''} ${user.id === currentSharer ? 'sharing' : ''}`;
-            
-            const avatarElement = document.createElement('div');
-            avatarElement.className = 'user-avatar';
-            avatarElement.textContent = getUserInitials(user.username);
-            
-            const usernameElement = document.createElement('div');
-            usernameElement.textContent = user.username;
-            
-            userElement.appendChild(avatarElement);
-            userElement.appendChild(usernameElement);
-            
-            if (user.id === currentSharer) {
-                const sharingIcon = document.createElement('i');
-                sharingIcon.className = 'fas fa-desktop ml-2 text-primary-400';
-                userElement.appendChild(sharingIcon);
-            }
-            
-            if (user.id === socketId) {
-                const selfBadge = document.createElement('span');
-                selfBadge.className = 'ml-2 text-xs text-primary-300';
-                selfBadge.textContent = '(ben)';
-                userElement.appendChild(selfBadge);
-            }
-            
-            usersContainer.appendChild(userElement);
+        if (!userIds.has(user.id)) {
+            userIds.add(user.id);
+            uniqueUsers.push(user);
+        } else {
+            debug(`Tekrarlanan kullanıcı ID'si atlandı: ${user.id} (${user.username})`);
         }
+    });
+    
+    uniqueUsers.forEach(user => {
+        const userElement = document.createElement('div');
+        userElement.id = `user-${user.id}`;
+        userElement.className = `user-item ${user.id === socketId ? 'self' : ''} ${user.id === currentSharer ? 'sharing' : ''}`;
+        
+        const avatarElement = document.createElement('div');
+        avatarElement.className = 'user-avatar';
+        avatarElement.textContent = getUserInitials(user.username);
+        
+        const usernameElement = document.createElement('div');
+        usernameElement.textContent = user.username;
+        
+        userElement.appendChild(avatarElement);
+        userElement.appendChild(usernameElement);
+        
+        if (user.id === currentSharer) {
+            const sharingIcon = document.createElement('i');
+            sharingIcon.className = 'fas fa-desktop ml-2 text-primary-400';
+            userElement.appendChild(sharingIcon);
+        }
+        
+        if (user.id === socketId) {
+            const selfBadge = document.createElement('span');
+            selfBadge.className = 'ml-2 text-xs text-primary-300';
+            selfBadge.textContent = '(ben)';
+            userElement.appendChild(selfBadge);
+        }
+        
+        usersContainer.appendChild(userElement);
     });
     
     // Debug panel'i güncelle
@@ -587,59 +558,51 @@ async function initializeCall() {
 // Ekran paylaşımını durdur
 async function stopSharing() {
     debug('Ekran paylaşımı durduruluyor...');
-
+    
     if (screenStream) {
         // Ekran paylaşımını kapat
         screenStream.getTracks().forEach(track => track.stop());
         screenStream = null;
     }
     
-    try {
-        // Update UI
-        waitingScreen.classList.remove('hidden');
-        sharingControls.classList.add('hidden');
-        isScreenSharing = false;
-
-        // Sunucuya ekran paylaşımını durduğumuzu bildir
-        socket.emit('stop-sharing', roomId);
+    // Update UI
+    waitingScreen.classList.remove('hidden');
+    sharingControls.classList.add('hidden');
+    isScreenSharing = false;
+    
+    // Sunucuya ekran paylaşımını durduğumuzu bildir
+    socket.emit('stop-sharing', roomId);
+    
+    // Ekran paylaşımı yapan kullanıcı işaretini kaldır
+    if (currentSharer === socketId) {
+        currentSharer = null;
         
-        // Ekran paylaşımı yapan kullanıcı işaretini kaldır
-        if (currentSharer === socketId) {
-            currentSharer = null;
-            
-            // Arayüzü güncelle
-            screenDisplay.srcObject = null;
-
-            // Kullanıcı listesini güncelle
-            const userElement = document.getElementById(`user-${socketId}`);
-            if (userElement) {
-                userElement.classList.remove('sharing');
-                const icon = userElement.querySelector('.fa-desktop');
-                if (icon) {
-                    icon.remove();
-                }
+        // Arayüzü güncelle
+        screenDisplay.srcObject = null;
+        
+        // Kullanıcı listesini güncelle
+        const userElement = document.getElementById(`user-${socketId}`);
+        if (userElement) {
+            userElement.classList.remove('sharing');
+            const icon = userElement.querySelector('.fa-desktop');
+            if (icon) {
+                icon.remove();
             }
         }
-        
-        // Mevcut tüm bağlantıları kapat
-        Object.keys(peerConnections).forEach(peerId => {
-            if (peerConnections[peerId]) {
-                peerConnections[peerId].close();
-                delete peerConnections[peerId];
-            }
-        });
-        
-        // Peer bağlantılarını temizle
-        peerConnections = {};
-        
-        showToast('Ekran paylaşımı durduruldu');
-    } catch (error) {
-        debug('Ekran paylaşımı durdurulurken hata:', error);
-        showToast('Ekran paylaşımı durdurulurken bir hata oluştu');
     }
+    
+    // Mevcut tüm bağlantıları kapat ve yeniden oluştur
+    Object.keys(peerConnections).forEach(peerId => {
+        if (peerConnections[peerId]) {
+            peerConnections[peerId].close();
+            delete peerConnections[peerId];
+        }
+    });
+    
+    showToast('Ekran paylaşımı durduruldu');
 }
 
-// Peer bağlantısı oluşturma fonksiyonu
+// Create a new RTCPeerConnection
 function createPeerConnection(peerId) {
     debug(`Peer bağlantısı oluşturuluyor: ${peerId}`);
     
@@ -650,35 +613,6 @@ function createPeerConnection(peerId) {
     }
     
     const peerConnection = new RTCPeerConnection(iceServers);
-    
-    // Track event - receiving remote stream
-    peerConnection.ontrack = (event) => {
-        debug(`${peerId} kullanıcısından medya track alındı:`, event.track.kind);
-        
-        if (event.track.kind === 'audio') {
-            // Ses track'i için özel işlem
-            const audioElement = document.createElement('audio');
-            audioElement.autoplay = true;
-            audioElement.srcObject = new MediaStream([event.track]);
-            document.body.appendChild(audioElement);
-        } else {
-            // Video track'i için mevcut işlem
-            if (!screenDisplay.srcObject) {
-                screenDisplay.srcObject = new MediaStream();
-            }
-            screenDisplay.srcObject.addTrack(event.track);
-        }
-    };
-    
-    // Mikrofon akışını ekle
-    if (isMicEnabled && micStream) {
-        micStream.getTracks().forEach(track => {
-            if (track.kind === 'audio') {
-                const sender = peerConnection.addTrack(track, micStream);
-                debug(`Ses gönderici oluşturuldu:`, sender);
-            }
-        });
-    }
     
     // ICE candidate event
     peerConnection.onicecandidate = (event) => {
@@ -966,9 +900,9 @@ function setupSocketEvents() {
     
     // Room joined event
     socket.on('room-joined', (data) => {
-        debug('Odaya katıldı:', data);
+        debug('Odaya katılındı:', data);
         roomId = data.roomId;
-        socketId = socket.id;
+        socketId = socket.id; // Socket ID'yi kaydet
         localStorage.setItem('watchtug_room', roomId);
         
         // Update room ID display
@@ -976,14 +910,23 @@ function setupSocketEvents() {
         
         // Update users list
         if (data.users && Array.isArray(data.users)) {
+            // Make sure our user ID is updated in the users list
+            const existingUserIndex = data.users.findIndex(u => u.username === username);
+            if (existingUserIndex !== -1 && data.users[existingUserIndex].id !== socketId) {
+                debug(`Kullanıcı ID'si güncelleniyor: ${data.users[existingUserIndex].id} -> ${socketId}`);
+                data.users[existingUserIndex].id = socketId;
+            }
+            
             updateUsersList(data.users);
+        } else {
+            debug('Kullanıcı listesi alınamadı!', data);
+            updateUsersList([]);
         }
         
         // Eğer odada aktif bir yayıncı varsa
         if (data.currentSharer) {
             debug(`Odada aktif bir yayıncı var: ${data.currentSharer}`);
             currentSharer = data.currentSharer;
-            waitingScreen.classList.add('hidden');
             
             // Yayıncıya hazır olduğumuzu bildir
             socket.emit('ready', { 
@@ -995,58 +938,133 @@ function setupSocketEvents() {
         
         // Show welcome toast
         showToast(`${data.roomId} odasına hoş geldiniz!`);
+        
+        // If this is our first join (not a reconnect), add a system message
+        if (!hasJoinedBefore) {
+            setTimeout(() => {
+                // Check if the server already sent a join message
+                const lastMessages = Array.from(chatMessages.children).slice(-3);
+                const hasJoinMessage = lastMessages.some(msg => 
+                    msg.classList.contains('system-message') && 
+                    msg.textContent.includes(`${username} odaya katıldı`)
+                );
+                
+                if (!hasJoinMessage) {
+                    addChatMessage({
+                        id: Date.now(),
+                        user: 'Sistem',
+                        message: `${username} odaya katıldı`,
+                        timestamp: new Date(),
+                        isSystem: true
+                    });
+                }
+                
+                hasJoinedBefore = true;
+            }, 1000);
+        }
     });
     
     // User joined event
     socket.on('user-joined', (user) => {
         debug('Kullanıcı odaya katıldı:', user);
         
-        // Kullanıcı zaten listede var mı kontrol et
+        // Skip if this is our own join event
+        if (user.id === socketId) {
+            debug('Kendi katılım olayımızı atlıyoruz');
+            return;
+        }
+        
+        // Add user to the users list if not already there
         const existingUser = document.getElementById(`user-${user.id}`);
         if (!existingUser) {
+            // Get current users from the DOM
             const usersList = Array.from(usersContainer.children)
                 .filter(el => el.id && el.id.startsWith('user-'))
-                .map(el => ({ 
-                    id: el.id.replace('user-', ''),
-                    username: el.querySelector('div:not(.user-avatar)').textContent
-                }));
+                .map(el => {
+                    const userNameEl = el.querySelector('div:not(.user-avatar)');
+                    return { 
+                        id: el.id.replace('user-', ''),
+                        username: userNameEl ? userNameEl.textContent.replace('(ben)', '').trim() : 'Kullanıcı'
+                    };
+                });
             
+            // Add the new user
             usersList.push(user);
+            
+            // Update the users list
             updateUsersList(usersList);
             
-            // Eğer biz yayın yapıyorsak, yeni kullanıcıya bağlantı kur
+            // If we're sharing, send a connection offer to the new user
             if (isScreenSharing && screenStream) {
                 debug(`Yeni kullanıcıya (${user.id}) ekran paylaşımı gönderiliyor`);
                 setTimeout(() => {
                     createPeerConnectionAndOffer(user.id);
                 }, 1000);
             }
+            
+            // Check if a system message about this join is already in the chat
+            setTimeout(() => {
+                const lastMessages = Array.from(chatMessages.children).slice(-3);
+                const hasJoinMessage = lastMessages.some(msg => 
+                    msg.classList.contains('system-message') && 
+                    msg.textContent.includes(`${user.username} odaya katıldı`)
+                );
+                
+                if (!hasJoinMessage) {
+                    addChatMessage({
+                        id: Date.now(),
+                        user: 'Sistem',
+                        message: `${user.username} odaya katıldı`,
+                        timestamp: new Date(),
+                        isSystem: true
+                    });
+                }
+            }, 500);
         }
     });
     
     // User disconnected event
     socket.on('user-disconnected', (userId) => {
-        debug('Kullanıcı ayrıldı:', userId);
+        debug('Kullanıcı bağlantısı kesildi:', userId);
         
-        // Kullanıcıyı listeden kaldır
+        // Find username before removing from UI
+        let username = "Kullanıcı";
         const userElement = document.getElementById(`user-${userId}`);
         if (userElement) {
-            userElement.remove();
-            
-            // Eğer ayrılan kullanıcı yayın yapıyorsa
-            if (currentSharer === userId) {
-                currentSharer = null;
-                waitingScreen.classList.remove('hidden');
-                screenDisplay.srcObject = null;
+            const usernameElement = userElement.querySelector('div:not(.user-avatar)');
+            if (usernameElement) {
+                username = usernameElement.textContent.replace('(ben)', '').trim();
             }
             
-            // Peer bağlantısını temizle
+            // Clean up peer connection
             cleanupPeerConnection(userId);
             
-            // Kullanıcı listesi boşsa mesaj göster
+            // Remove user from the list
+            userElement.remove();
+            
+            // If no more users, show empty message
             if (usersContainer.children.length === 0) {
                 updateUsersList([]);
             }
+            
+            // Add system message to chat if not already added by server
+            // This is a backup in case server message didn't arrive
+            setTimeout(() => {
+                const lastMessage = chatMessages.lastElementChild;
+                const isDisconnectMessage = lastMessage && 
+                                          lastMessage.classList.contains('system-message') && 
+                                          lastMessage.textContent.includes(`${username} odadan ayrıldı`);
+                
+                if (!isDisconnectMessage) {
+                    addChatMessage({
+                        id: Date.now(),
+                        user: 'Sistem',
+                        message: `${username} odadan ayrıldı`,
+                        timestamp: new Date(),
+                        isSystem: true
+                    });
+                }
+            }, 1000);
         }
     });
     
@@ -1193,49 +1211,6 @@ function setupSocketEvents() {
                 debug('ICE candidate başarıyla eklendi');
             } catch (error) {
                 debug('ICE candidate eklenirken hata:', error);
-            }
-        }
-    });
-
-    // Mikrofon durumu
-    socket.on('mic-status-changed', (data) => {
-        const userElement = document.getElementById(`user-${data.userId}`);
-        if (userElement) {
-            const micIcon = userElement.querySelector('.mic-status');
-            if (micIcon) {
-                if (data.isMuted) {
-                    micIcon.classList.remove('fa-microphone', 'text-green-500');
-                    micIcon.classList.add('fa-microphone-slash', 'text-red-500');
-                } else {
-                    micIcon.classList.remove('fa-microphone-slash', 'text-red-500');
-                    micIcon.classList.add('fa-microphone', 'text-green-500');
-                }
-            }
-        }
-    });
-    
-    // Force leave event
-    socket.on('force-leave', (data) => {
-        debug('Kullanıcı zorla ayrıldı:', data);
-        
-        // Kullanıcıyı listeden kaldır
-        const userElement = document.getElementById(`user-${data.userId}`);
-        if (userElement) {
-            userElement.remove();
-            
-            // Eğer ayrılan kullanıcı yayın yapıyorsa
-            if (currentSharer === data.userId) {
-                currentSharer = null;
-                waitingScreen.classList.remove('hidden');
-                screenDisplay.srcObject = null;
-            }
-            
-            // Peer bağlantısını temizle
-            cleanupPeerConnection(data.userId);
-            
-            // Kullanıcı listesi boşsa mesaj göster
-            if (usersContainer.children.length === 0) {
-                updateUsersList([]);
             }
         }
     });
@@ -1868,29 +1843,6 @@ function setupEventListeners() {
     
     // Close toast
     closeToast.addEventListener('click', hideToast);
-
-    // Mikrofon butonu
-    if (micBtn) {
-        micBtn.addEventListener('click', async () => {
-            if (!isMicEnabled) {
-                await initMicrophone();
-            } else {
-                stopMicrophone();
-            }
-        });
-    }
-    
-    // Sayfa kapatıldığında veya yenilendiğinde
-    window.addEventListener('beforeunload', () => {
-        if (socket) {
-            socket.emit('force-leave', {
-                roomId: roomId,
-                userId: socketId,
-                username: username
-            });
-            socket.disconnect();
-        }
-    });
 }
 
 // Odaya katılma işlevi
@@ -1988,139 +1940,6 @@ function sendChatMessage(message) {
         timestamp: new Date(),
         isSystem: false
     });
-}
-
-// Mikrofonu başlat
-async function initMicrophone() {
-    try {
-        micStream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true
-            }
-        });
-        
-        // Mikrofon durumunu güncelle
-        isMicEnabled = true;
-        updateMicButton();
-        
-        // Mikrofon akışını tüm peer bağlantılarına ekle
-        Object.keys(peerConnections).forEach(peerId => {
-            if (peerConnections[peerId]) {
-                micStream.getTracks().forEach(track => {
-                    if (track.kind === 'audio') {
-                        const sender = peerConnections[peerId].addTrack(track, micStream);
-                        debug(`Ses gönderici oluşturuldu:`, sender);
-                    }
-                });
-            }
-        });
-        
-        // Sunucuya mikrofon durumunu bildir
-        socket.emit('mic-status', {
-            roomId: roomId,
-            isMuted: false
-        });
-        
-        showToast('Mikrofon açıldı');
-    } catch (error) {
-        console.error('Mikrofon başlatılamadı:', error);
-        showToast('Mikrofon başlatılamadı');
-    }
-}
-
-// Mikrofonu kapat
-function stopMicrophone() {
-    if (micStream) {
-        micStream.getTracks().forEach(track => track.stop());
-        micStream = null;
-    }
-    
-    // Tüm peer bağlantılarından ses göndericilerini kaldır
-    Object.keys(peerConnections).forEach(peerId => {
-        if (peerConnections[peerId]) {
-            const senders = peerConnections[peerId].getSenders();
-            senders.forEach(sender => {
-                if (sender.track && sender.track.kind === 'audio') {
-                    peerConnections[peerId].removeTrack(sender);
-                }
-            });
-        }
-    });
-    
-    isMicEnabled = false;
-    updateMicButton();
-    
-    // Sunucuya mikrofon durumunu bildir
-    socket.emit('mic-status', {
-        roomId: roomId,
-        isMuted: true
-    });
-    
-    showToast('Mikrofon kapatıldı');
-}
-
-// Mikrofon düğmesini güncelle
-function updateMicButton() {
-    const micBtn = document.getElementById('micBtn');
-    if (micBtn) {
-        micBtn.style.display = 'none'; // Mikrofon butonunu gizle
-    }
-}
-
-// Leave room function
-function leaveRoom() {
-    debug('Odadan ayrılıyor...');
-    
-    // Ekran paylaşımı yapıyorsak durdur
-    if (isScreenSharing) {
-        stopSharing();
-    }
-    
-    // Tüm peer bağlantılarını temizle
-    Object.keys(peerConnections).forEach(peerId => {
-        cleanupPeerConnection(peerId);
-    });
-    
-    // Socket bağlantısını kapat
-    if (socket) {
-        socket.emit('leave-room', {
-            roomId: roomId,
-            userId: socketId,
-            username: username
-        });
-        socket.disconnect();
-    }
-    
-    // Local storage'ı temizle
-    localStorage.removeItem('watchtug_room');
-    
-    // Ana sayfaya yönlendir
-    window.location.href = '/';
-}
-
-// Clean up peer connection
-function cleanupPeerConnection(peerId) {
-    debug(`Peer bağlantısı temizleniyor: ${peerId}`);
-    
-    if (peerConnections[peerId]) {
-        try {
-            peerConnections[peerId].close();
-        } catch (e) {
-            debug('Peer bağlantısı kapatılırken hata:', e);
-        }
-        delete peerConnections[peerId];
-        
-        // Eğer bu kullanıcı yayın yapıyorsa, video ekranını temizle
-        if (currentSharer === peerId) {
-            if (screenDisplay) {
-                screenDisplay.srcObject = null;
-            }
-            waitingScreen.classList.remove('hidden');
-            currentSharer = null;
-        }
-    }
 }
 
 // Initialize on DOM load

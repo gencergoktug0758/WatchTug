@@ -418,17 +418,6 @@ io.on('connection', (socket) => {
         console.log(`Chat mesajı: ${username} -> "${data.message}" (Oda: ${data.roomId})`);
     });
     
-    // Mikrofon durumu değiştiğinde
-    socket.on('mic-status', (data) => {
-        const { roomId, isMuted } = data;
-        
-        // Odadaki diğer kullanıcılara mikrofon durumunu bildir
-        socket.to(roomId).emit('mic-status-changed', {
-            userId: socket.id,
-            isMuted: isMuted
-        });
-    });
-    
     // Bağlantı kesildiğinde
     socket.on('disconnect', () => {
         console.log(`Kullanıcı ayrıldı: ${socket.id}`);
