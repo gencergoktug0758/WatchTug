@@ -11,7 +11,9 @@ const io = socketIo(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
-    credentials: false
+    credentials: false,
+    transports: ['polling'],
+    upgrade: false
   }
 });
 
