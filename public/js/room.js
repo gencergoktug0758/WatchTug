@@ -2417,6 +2417,20 @@ function checkForActiveStreams() {
                         to: currentSharer 
                     });
                     
+                    // Second request to ensure connection (Vercel workaround)
+                    setTimeout(() => {
+                        if (!peerConnections[currentSharer] || 
+                            !peerConnections[currentSharer].connectionState || 
+                            peerConnections[currentSharer].connectionState !== 'connected') {
+                            debug('Re-sending ready signal for Vercel compatibility');
+                            socket.emit('ready', { 
+                                roomId: roomId,
+                                from: socketId,
+                                to: currentSharer 
+                            });
+                        }
+                    }, 2000);
+                    
                     // Update UI to show who is sharing
                     const userElement = document.getElementById(`user-${currentSharer}`);
                     if (userElement) {
