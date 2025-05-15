@@ -12,7 +12,10 @@ const io = socketIo(server, {
     origin: "*",
     methods: ["GET", "POST"],
     credentials: false
-  }
+  },
+  path: "/socket.io/",
+  transports: ['websocket', 'polling'],
+  allowEIO3: true
 });
 
 // Middleware
@@ -645,12 +648,18 @@ server.on('error', (error) => {
   log(`Server Hatası: ${error.message}`, 'error');
 });
 
-// Sunucuyu başlat
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => {
-  log(`WatchTug sunucusu ${PORT} portunda çalışıyor`, 'success');
-  log(`http://localhost:${PORT} adresinden erişebilirsiniz`, 'success');
-}); 
+// Sunucuyu başlat (development için)
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 3000;
+  server.listen(PORT, '0.0.0.0', () => {
+    log(`WatchTug sunucusu ${PORT} portunda çalışıyor`, 'success');
+    log(`http://localhost:${PORT} adresinden erişebilirsiniz`, 'success');
+  });
+}
 
-// Vercel için module exports
+// Vercel için exports - serverless environments için
 module.exports = app;
+
+// Vercel için server ve io'yu da export et
+module.exports.server = server;
+module.exports.io = io;

@@ -27,5 +27,9 @@
   },
   "engines": {
     "node": ">=16.0.0"
+  },
+  "vercel": {
+    "regions": ["fra1"],
+    "public": true
   }
 }

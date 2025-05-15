@@ -74,8 +74,9 @@ const socket = io(window.location.origin, {
     reconnectionDelayMax: 5000,
     reconnectionAttempts: 20,
     timeout: 10000,
-    transports: ['websocket', 'polling'],
-    forceNew: true
+    transports: ['polling', 'websocket'], // polling first for Vercel compatibility
+    forceNew: true,
+    path: '/socket.io/'
 });
 
 // Video kalitesi ve buffer ayarları
