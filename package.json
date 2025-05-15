@@ -5,8 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js",
-    "build": "echo 'Build completed'"
+    "dev": "nodemon server.js"
   },
   "keywords": [
     "webrtc",
@@ -27,9 +26,5 @@
   },
   "engines": {
     "node": ">=16.0.0"
-  },
-  "vercel": {
-    "regions": ["fra1"],
-    "public": true
   }
 }

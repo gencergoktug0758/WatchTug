@@ -74,9 +74,8 @@ const socket = io(window.location.origin, {
     reconnectionDelayMax: 5000,
     reconnectionAttempts: 20,
     timeout: 10000,
-    transports: ['polling', 'websocket'], // polling first for Vercel compatibility
-    forceNew: true,
-    path: '/socket.io/'
+    transports: ['websocket', 'polling'],
+    forceNew: true
 });
 
 // Video kalitesi ve buffer ayarları
@@ -776,8 +775,8 @@ function createPeerConnection(peerId) {
             // Eğer bu paylaşım yapan kullanıcıysa ve hala paylaşım yapıyorsa
             if (peerId === currentSharer) {
                 // Bağlantıyı temizle ve yeniden dene
-                cleanupPeerConnection(peerId);
-                
+            cleanupPeerConnection(peerId);
+            
                 // Kısa bir süre sonra yeniden bağlanmayı dene
                 setTimeout(() => {
                     socket.emit('ready', { 
@@ -1395,23 +1394,23 @@ function setupSocketEvents() {
         debug('Offer alındı:', data);
         
         try {
-            // Create peer connection if not exists
-            const peerConnection = createPeerConnection(data.from);
-            
-            // Set remote description
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-            
-            // Create and send answer
-            const answer = await peerConnection.createAnswer();
-            await peerConnection.setLocalDescription(answer);
-            
-            debug(`${data.from} kullanıcısına answer gönderiliyor`);
-            socket.emit('answer', {
-                answer: peerConnection.localDescription,
-                target: data.from,
-                from: socketId,
-                roomId: roomId
-            });
+        // Create peer connection if not exists
+        const peerConnection = createPeerConnection(data.from);
+        
+        // Set remote description
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+        
+        // Create and send answer
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        
+        debug(`${data.from} kullanıcısına answer gönderiliyor`);
+        socket.emit('answer', {
+            answer: peerConnection.localDescription,
+            target: data.from,
+            from: socketId,
+            roomId: roomId
+        });
             
             // Offer aldığımızda waitingScreen'i gizle (yayın gelecek demektir)
             waitingScreen.classList.add('hidden');
@@ -1436,10 +1435,10 @@ function setupSocketEvents() {
         debug('Answer alındı:', data);
         
         try {
-            const peerConnection = peerConnections[data.from];
-            if (peerConnection) {
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-                debug('Remote description başarıyla set edildi');
+        const peerConnection = peerConnections[data.from];
+        if (peerConnection) {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+            debug('Remote description başarıyla set edildi');
             } else {
                 debug('Answer için peer bağlantısı bulunamadı, yeniden bağlanılıyor...');
                 socket.emit('ready', { 
@@ -1488,7 +1487,7 @@ function cleanupCurrentConnection() {
             debug(`Peer bağlantısı temizleniyor: ${peerId}`);
             peerConnections[peerId].close();
             delete peerConnections[peerId];
-        }
+    }
     });
     
     // Video akışını temizle
@@ -1925,8 +1924,8 @@ window.addEventListener('load', () => {
                         
                         // 2 saniye sonra video bağlantısını yenile
                         setTimeout(refreshVideoConnection, 2000);
-                    }
-                });
+                        }
+                    });
             } else {
                 debug('Halen bağlantı kurulmamış, yeniden deneniyor...');
                 if (socket && typeof socket.connect === 'function') {
@@ -2296,7 +2295,7 @@ function joinRoom() {
     // Odaya katılma isteğini doğrulama sonrası gönderecek şekilde güncelle
     // Doğrulama sonucu socket.on('username-validated') event handler'ında işlenecek
     setTimeout(() => {
-        socket.emit('join-room', roomId);
+    socket.emit('join-room', roomId);
     }, 300); // Küçük bir gecikme ekleyerek doğrulama işleminin tamamlanmasını bekle
     
     // Socket disconnect sonrası yeniden bağlanmada kullanılmak üzere son bilgileri sakla
@@ -2416,20 +2415,6 @@ function checkForActiveStreams() {
                         from: socketId,
                         to: currentSharer 
                     });
-                    
-                    // Second request to ensure connection (Vercel workaround)
-                    setTimeout(() => {
-                        if (!peerConnections[currentSharer] || 
-                            !peerConnections[currentSharer].connectionState || 
-                            peerConnections[currentSharer].connectionState !== 'connected') {
-                            debug('Re-sending ready signal for Vercel compatibility');
-                            socket.emit('ready', { 
-                                roomId: roomId,
-                                from: socketId,
-                                to: currentSharer 
-                            });
-                        }
-                    }, 2000);
                     
                     // Update UI to show who is sharing
                     const userElement = document.getElementById(`user-${currentSharer}`);

@@ -12,10 +12,7 @@ const io = socketIo(server, {
     origin: "*",
     methods: ["GET", "POST"],
     credentials: false
-  },
-  path: "/socket.io/",
-  transports: ['websocket', 'polling'],
-  allowEIO3: true
+  }
 });
 
 // Middleware
@@ -358,9 +355,9 @@ io.on('connection', (socket) => {
         if (typeof payload === 'string') {
             roomId = payload.trim();
             console.log(`Hazır sinyali (genel): ${socket.id} -> ${roomId}`);
-            
-            // Odadaki diğer kullanıcılara hazır sinyalini gönder
-            socket.broadcast.to(roomId).emit('ready', { from: socket.id });
+        
+        // Odadaki diğer kullanıcılara hazır sinyalini gönder
+        socket.broadcast.to(roomId).emit('ready', { from: socket.id });
         } else if (typeof payload === 'object') {
             roomId = payload.roomId;
             targetId = payload.to;
@@ -648,18 +645,9 @@ server.on('error', (error) => {
   log(`Server Hatası: ${error.message}`, 'error');
 });
 
-// Sunucuyu başlat (development için)
-if (process.env.NODE_ENV !== 'production') {
-  const PORT = process.env.PORT || 3000;
-  server.listen(PORT, '0.0.0.0', () => {
-    log(`WatchTug sunucusu ${PORT} portunda çalışıyor`, 'success');
-    log(`http://localhost:${PORT} adresinden erişebilirsiniz`, 'success');
-  });
-}
-
-// Vercel için exports - serverless environments için
-module.exports = app;
-
-// Vercel için server ve io'yu da export et
-module.exports.server = server;
-module.exports.io = io;
+// Sunucuyu başlat
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, '0.0.0.0', () => {
+  log(`WatchTug sunucusu ${PORT} portunda çalışıyor`, 'success');
+  log(`http://localhost:${PORT} adresinden erişebilirsiniz`, 'success');
+}); 
