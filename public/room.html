@@ -371,24 +371,34 @@
                 display: flex !important;
                 flex-direction: column !important;
                 margin: 0 !important;
+                overflow: hidden !important; /* Taşmaları engelle */
             }
 
             .theater-chat h2 {
                 font-size: 1rem !important;
                 margin-bottom: 8px !important;
+                position: absolute !important;
+                top: 10px !important;
+                left: 10px !important;
+                right: 10px !important;
+                height: 30px !important;
             }
 
             .theater-chat #chatMessages {
                 flex: 1 !important;
-                height: calc(55vh - 120px) !important;
+                position: absolute !important;
+                top: 30px !important; /* Changed from 40px to 30px to move messages higher */
+                left: 10px !important;
+                right: 10px !important;
+                bottom: 65px !important; /* Form için alan bıraktım */
                 overflow-y: auto !important;
                 -webkit-overflow-scrolling: touch !important;
-                padding-bottom: 80px !important; /* Alt boşluğu 120px'den 80px'e düşürdüm */
-                margin-bottom: 50px !important;
+                padding: 5px !important;
+                margin: 0 !important;
             }
 
             .theater-chat #chatForm {
-                position: fixed !important;
+                position: fixed !important; /* absolute yerine fixed kullanarak her zaman görünmesini sağla */
                 bottom: 0 !important;
                 left: 0 !important;
                 right: 0 !important;
@@ -396,20 +406,54 @@
                 background: rgba(0, 0, 0, 0.95) !important;
                 border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
                 margin: 0 !important;
+                z-index: 9999 !important; /* En yüksek z-index değeri */
+                height: 65px !important; /* Sabit yükseklik */
+                display: flex !important; /* Flex ekledim */
+                align-items: center !important; /* Dikey hizalama */
+                visibility: visible !important; /* Kesinlikle görünür olmasını sağla */
+                opacity: 1 !important; /* Tam opaklık */
             }
 
+            /* Mesaj yazma formunu görünür hale getir */
             .theater-chat #chatForm .flex {
-                background: rgba(0, 0, 0, 0.3) !important; /* Form arka planını biraz daha belirgin yaptım */
+                display: flex !important;
+                width: 100% !important;
+                background: rgba(0, 0, 0, 0.3) !important;
                 border: 1px solid rgba(255, 255, 255, 0.1) !important;
+                border-radius: 8px !important;
+                visibility: visible !important; /* Kesinlikle görünür olmasını sağla */
+                opacity: 1 !important; /* Tam opaklık */
             }
-
+            
+            /* Input alanını görünür hale getir */
             .theater-chat #chatForm input {
-                height: 45px !important; /* Input yüksekliğini artırdım */
+                height: 45px !important;
                 font-size: 0.95rem !important;
+                display: block !important;
+                width: 100% !important;
+                color: white !important;
+                visibility: visible !important; /* Kesinlikle görünür olmasını sağla */
+                opacity: 1 !important; /* Tam opaklık */
             }
 
-            .theater-chat #chatForm button {
-                height: 45px !important; /* Buton yüksekliğini artırdım */
+            /* Emoji butonunu görünür hale getir */
+            .theater-chat #chatForm #emojiPickerBtn {
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                padding: 0 10px !important;
+                color: rgba(255, 255, 255, 0.7) !important;
+            }
+            
+            /* Gönderme butonunu görünür hale getir */
+            .theater-chat #chatForm button[type="submit"] {
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                padding: 0 15px !important;
+                height: 45px !important;
+                background-color: theme('colors.primary.600') !important;
+                color: white !important;
             }
 
             /* Mesajların görünümünü iyileştirme */
@@ -431,6 +475,39 @@
             /* Kullanıcılar panelini gizle */
             .theater-chat .bg-black\/30:first-child {
                 display: none !important;
+            }
+        }
+
+        /* Mobil cihazlarda form düzenlemeleri */
+        @media (max-width: 480px) {
+            .theater-chat #chatForm {
+                padding: 5px !important;
+            }
+            
+            .theater-chat #chatForm .flex {
+                border-radius: 5px !important;
+            }
+            
+            .theater-chat #chatForm input {
+                height: 40px !important;
+                font-size: 14px !important;
+            }
+            
+            .theater-chat #chatForm button[type="submit"] {
+                padding: 0 10px !important;
+                height: 40px !important;
+            }
+            
+            .theater-chat #chatForm #emojiPickerBtn {
+                padding: 0 8px !important;
+            }
+            
+            /* Emoji picker mobil düzenlemesi */
+            .theater-chat emoji-picker {
+                max-width: 280px !important;
+                max-height: 320px !important;
+                bottom: 65px !important;
+                right: 5px !important;
             }
         }
 
@@ -559,6 +636,28 @@
                 max-height: 100vh !important;
                 margin: auto !important;
             }
+        }
+
+        /* Emoji picker'ı düzgün konumlandır */
+        .theater-chat emoji-picker {
+            position: absolute !important;
+            bottom: 70px !important; /* Form üzerinde konumlandır */
+            right: 10px !important;
+            z-index: 40 !important; /* Form'dan daha yüksek z-index */
+            max-width: 320px !important;
+            width: 100% !important;
+            border-radius: 8px !important;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5) !important;
+        }
+        
+        /* Emoji butonunu görünür hale getir */
+        .theater-chat #chatForm #emojiPickerBtn {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            padding: 0 10px !important;
+            color: rgba(255, 255, 255, 0.7) !important;
+            z-index: 31 !important; /* Form'dan daha yüksek z-index */
         }
     </style>
 </head>

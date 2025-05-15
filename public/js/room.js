@@ -53,6 +53,7 @@ let notificationTimeout = null;
 let lastDisconnectTime = 0;
 let hasJoinedBefore = false;
 const RECONNECT_THRESHOLD = 2000; // 2 seconds
+let activeStreamCheckInterval = null; // Interval for checking active streams
 
 // Mobil cihaz kontrolü
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -95,8 +96,8 @@ let messageCount = 0;
 let lastMessageTime = 0;
 let isSpamBlocked = false;
 let spamTimeout = null;
-const MAX_MESSAGES = 5;
-const MESSAGE_WINDOW = 10000; // 10 saniye
+const MAX_MESSAGES = 7;
+const MESSAGE_WINDOW = 1000; // 1 saniye
 const SPAM_COOLDOWN = 30000; // 30 saniye
 
 // Performance Monitoring
@@ -107,6 +108,58 @@ let lastPingTime = 0;
 let bandwidthStats = { bytesReceived: 0, lastUpdate: 0 };
 let cpuUsage = 0;
 let memoryUsage = 0;
+
+// Küfür ve uygunsuz kelime kontrolü için blockedWords array'i ekleyelim
+const blockedWords = [
+    'amk', 'aq', 'sg', 'oç', 'piç', 'yavşak', 'amına', 'sikerim', 'sikim', 'amcık', 'amcik',
+    'ananısikim', 'ananisikim', 'anan', 'sikeyim', 'sikik', 'amq', 'amcık', 'amcik', 'amına koyayım',
+    'amina koyayim', 'amına koyim', 'amina koyim', 'mk', 'aq', 'sg', 'oc', 'pic', 'yavşak',
+    'amina', 'sikerim', 'sikim', 'amcik', 'amcık', 'ananisikim', 'ananısikim', 'anan', 'sikeyim',
+    'sikik', 'amq', 'amcik', 'amcık', 'amina koyayim', 'amına koyayım', 'amina koyim', 'amına koyim'
+];
+
+// Input değerlerini temizle ve kontrol et
+function sanitizeInput(input) {
+    return input.trim().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '');
+}
+
+function containsBlockedWords(text) {
+    const lowerText = text.toLowerCase();
+    // Metni kelimelere ayır
+    const words = lowerText.split(/\s+/);
+    
+    // Her kelimeyi kontrol et
+    return words.some(word => {
+        // Noktalama işaretlerini temizle
+        const cleanWord = word.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '');
+        // Tam kelime eşleşmesi kontrol et
+        return blockedWords.includes(cleanWord);
+    });
+}
+
+// Validate input
+function validateUsername(username) {
+    const sanitizedUsername = sanitizeInput(username);
+    
+    if (!sanitizedUsername || sanitizedUsername.length < 2) {
+        return {
+            isValid: false,
+            message: 'Lütfen en az 2 karakter içeren bir kullanıcı adı girin'
+        };
+    }
+
+    if (containsBlockedWords(sanitizedUsername)) {
+        return {
+            isValid: false,
+            message: 'Kullanıcı adında uygunsuz kelimeler bulunamaz'
+        };
+    }
+
+    return {
+        isValid: true,
+        sanitizedValue: sanitizedUsername
+    };
+}
 
 function updatePerformanceStats() {
     // FPS Calculation - Daha doğru FPS hesaplama
@@ -363,12 +416,49 @@ function addChatMessage(message, isScrollToBottom = true) {
     
     // Scroll to bottom if needed
     if (isScrollToBottom) {
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        scrollChatToBottom();
     }
 
     // Eğer tam ekran modundaysak ve sistem mesajı değilse bildirim göster
     if (isFullscreen && !message.isSystem && message.user !== username) {
         showMessageNotification(message);
+    }
+}
+
+// Sohbet mesajlarını en alta kaydır
+function scrollChatToBottom() {
+    if (!chatMessages) return;
+    
+    // Mobil cihazlarda daha agresif kaydırma
+    if (isMobile) {
+        // Önce normal kaydırma
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        
+        // Sonra birkaç kez daha deneme (DOM güncellemesinin tamamlanmasını beklemek için)
+        setTimeout(() => {
+            chatMessages.scrollTop = chatMessages.scrollHeight + 1000; // Ekstra değer ekleyerek zorla kaydırma
+            
+            // Tiyatro modunda ekstra önlemler
+            if (isTheaterMode) {
+                // Birkaç kez daha deneme
+                setTimeout(() => {
+                    chatMessages.scrollTop = chatMessages.scrollHeight + 1000;
+                    
+                    // Son bir deneme daha
+                    setTimeout(() => {
+                        chatMessages.scrollTop = chatMessages.scrollHeight + 1000;
+                        
+                        // Scroll pozisyonunu kontrol et, eğer hala en altta değilse zorla
+                        if (chatMessages.scrollHeight - chatMessages.scrollTop > chatMessages.clientHeight + 50) {
+                            chatMessages.scrollTop = chatMessages.scrollHeight + 1000;
+                        }
+                    }, 300);
+                }, 150);
+            }
+        }, 50);
+    } else {
+        // Masaüstü için normal kaydırma
+        chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 }
 
@@ -612,7 +702,20 @@ function createPeerConnection(peerId) {
         delete peerConnections[peerId];
     }
     
-    const peerConnection = new RTCPeerConnection(iceServers);
+    // Daha güçlü ICE sunucu yapılandırması
+    const peerConnection = new RTCPeerConnection({
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun3.l.google.com:19302' },
+            { urls: 'stun:stun4.l.google.com:19302' }
+        ],
+        iceCandidatePoolSize: 10,
+        iceTransportPolicy: 'all',
+        bundlePolicy: 'max-bundle',
+        rtcpMuxPolicy: 'require'
+    });
     
     // ICE candidate event
     peerConnection.onicecandidate = (event) => {
@@ -630,6 +733,34 @@ function createPeerConnection(peerId) {
     // Connection state changes
     peerConnection.onconnectionstatechange = () => {
         debug(`Bağlantı durumu değişti: ${peerConnection.connectionState}, Peer: ${peerId}`);
+        
+        // Bağlantı başarılı olduğunda
+        if (peerConnection.connectionState === 'connected') {
+            debug(`Peer bağlantısı başarılı: ${peerId}`);
+            waitingScreen.classList.add('hidden');
+        }
+        
+        // Bağlantı koptuğunda veya başarısız olduğunda
+        if (peerConnection.connectionState === 'disconnected' || 
+            peerConnection.connectionState === 'failed' ||
+            peerConnection.connectionState === 'closed') {
+            debug(`Peer bağlantısı koptu/başarısız oldu: ${peerId}`);
+            
+            // Eğer bu paylaşım yapan kullanıcıysa ve hala paylaşım yapıyorsa
+            if (peerId === currentSharer) {
+                // Bağlantıyı temizle ve yeniden dene
+                cleanupPeerConnection(peerId);
+                
+                // Kısa bir süre sonra yeniden bağlanmayı dene
+                setTimeout(() => {
+                    socket.emit('ready', { 
+                        roomId: roomId,
+                        from: socketId,
+                        to: peerId 
+                    });
+                }, 1000);
+            }
+        }
     };
     
     // ICE connection state changes
@@ -640,14 +771,20 @@ function createPeerConnection(peerId) {
             peerConnection.iceConnectionState === 'failed' ||
             peerConnection.iceConnectionState === 'closed') {
             debug(`ICE bağlantısı koptu/başarısız oldu: ${peerId}`);
-            cleanupPeerConnection(peerId);
             
-            // Yeniden bağlanmayı dene
-            if (isScreenSharing && screenStream) {
+            // Eğer bu paylaşım yapan kullanıcıysa ve hala paylaşım yapıyorsa
+            if (peerId === currentSharer) {
+                // Bağlantıyı temizle ve yeniden dene
+                cleanupPeerConnection(peerId);
+                
+                // Kısa bir süre sonra yeniden bağlanmayı dene
                 setTimeout(() => {
-                    debug(`${peerId} ile yeniden bağlantı kuruluyor...`);
-                    createPeerConnectionAndOffer(peerId);
-                }, 2000);
+                    socket.emit('ready', { 
+                        roomId: roomId,
+                        from: socketId,
+                        to: peerId 
+                    });
+                }, 1000);
             }
         }
     };
@@ -663,6 +800,9 @@ function createPeerConnection(peerId) {
         
         // Track'i ekle
         screenDisplay.srcObject.addTrack(event.track);
+        
+        // waitingScreen'i gizle
+        waitingScreen.classList.add('hidden');
         
         // Video hazır olduğunda
         screenDisplay.onloadedmetadata = () => {
@@ -694,6 +834,7 @@ function createPeerConnection(peerId) {
                         .then(() => {
                             debug('Video sessiz modda başlatıldı');
                             screenDisplay.muted = false;
+                            waitingScreen.classList.add('hidden');
                         })
                         .catch(err => {
                             debug('Video oynatma tekrar başarısız:', err);
@@ -821,11 +962,77 @@ function setupSocketEvents() {
         showToast('Sunucuya bağlandı!', 2000);
     });
     
+    // Username validation error
+    socket.on('username-error', (data) => {
+        debug(`Kullanıcı adı hatası: ${data.message}`);
+        
+        // Geçersiz kullanıcı adını localStorage'dan sil
+        localStorage.removeItem('watchtug_username');
+        
+        // Varsayılan kullanıcı adını kullan
+        username = 'Misafir';
+        
+        // Kullanıcıya bildir
+        showToast(`Kullanıcı adı geçersiz: ${data.message}. 'Misafir' olarak devam ediliyor.`, 3000);
+        
+        // Yeni kullanıcı adıyla tekrar dene
+        socket.emit('set-username', username);
+    });
+    
+    // Username validation success
+    socket.on('username-validated', (data) => {
+        debug(`Kullanıcı adı doğrulandı: ${data.username}`);
+        
+        // Sunucudan gelen doğrulanmış kullanıcı adını kullan
+        username = data.username;
+        
+        // Doğrulanmış kullanıcı adını localStorage'a kaydet
+        localStorage.setItem('watchtug_username', username);
+    });
+    
+    // Otomatik yayın bağlantısı
+    socket.on('auto-connect-stream', (data) => {
+        debug(`Otomatik yayın bağlantısı sinyali alındı: ${data.sharerId}`);
+        
+        // Yayın paylaşan kişiyi kaydet
+        currentSharer = data.sharerId;
+        
+        // Yayına bağlan
+        socket.emit('ready', { 
+            roomId: data.roomId,
+            from: socketId,
+            to: data.sharerId 
+        });
+        
+        // UI'ı güncelle - paylaşım yapan kullanıcıyı göster
+        const userElement = document.getElementById(`user-${data.sharerId}`);
+        if (userElement) {
+            userElement.classList.add('sharing');
+            
+            // Paylaşım ikonunu ekle (eğer yoksa)
+            if (!userElement.querySelector('.fa-desktop')) {
+                const sharingIcon = document.createElement('i');
+                sharingIcon.className = 'fas fa-desktop ml-2 text-primary-400';
+                userElement.appendChild(sharingIcon);
+            }
+            
+            // Kullanıcı adını al ve bildirim göster
+            const sharingUsername = userElement.querySelector('div:not(.user-avatar)').textContent.replace('(ben)', '').trim();
+            showToast(`${sharingUsername} ekran paylaşımına bağlanılıyor...`, 3000);
+        }
+    });
+    
     // Disconnect event
     socket.on('disconnect', (reason) => {
         debug('Sunucu bağlantısı kesildi:', reason);
         isConnectedToServer = false;
         lastDisconnectTime = Date.now();
+        
+        // Clear active stream check interval
+        if (activeStreamCheckInterval) {
+            clearInterval(activeStreamCheckInterval);
+            activeStreamCheckInterval = null;
+        }
         
         // Bağlantı kesildiğinde bilgileri sakla
         if (username) {
@@ -934,6 +1141,17 @@ function setupSocketEvents() {
                 from: socketId,
                 to: data.currentSharer 
             });
+        }
+        
+        // Start checking for active streams
+        if (activeStreamCheckInterval) {
+            clearInterval(activeStreamCheckInterval);
+        }
+        activeStreamCheckInterval = setInterval(checkForActiveStreams, 500); // Check every 0.5 seconds
+        
+        // Sayfa yenilemesinden sonra video akışı varsa waitingScreen'i gizle
+        if (screenDisplay && screenDisplay.srcObject && screenDisplay.srcObject.active) {
+            waitingScreen.classList.add('hidden');
         }
         
         // Show welcome toast
@@ -1072,6 +1290,9 @@ function setupSocketEvents() {
     socket.on('chat-message', (message) => {
         // Spam engeli sadece mesaj göndermeyi etkiler, gelen mesajları her zaman göster
         addChatMessage(message);
+        
+        // Her zaman mesajları aşağı kaydır, özellikle tiyatro modunda
+        scrollChatToBottom();
     });
     
     // Chat history event
@@ -1088,7 +1309,7 @@ function setupSocketEvents() {
             });
             
             // Scroll to bottom
-            chatMessages.scrollTop = chatMessages.scrollHeight;
+            scrollChatToBottom();
         }
     });
     
@@ -1172,32 +1393,74 @@ function setupSocketEvents() {
     socket.on('offer', async (data) => {
         debug('Offer alındı:', data);
         
-        // Create peer connection if not exists
-        const peerConnection = createPeerConnection(data.from);
-        
-        // Set remote description
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-        
-        // Create and send answer
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
-        
-        debug(`${data.from} kullanıcısına answer gönderiliyor`);
-        socket.emit('answer', {
-            answer: peerConnection.localDescription,
-            target: data.from,
-            from: socketId,
-            roomId: roomId
-        });
+        try {
+            // Create peer connection if not exists
+            const peerConnection = createPeerConnection(data.from);
+            
+            // Set remote description
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+            
+            // Create and send answer
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            
+            debug(`${data.from} kullanıcısına answer gönderiliyor`);
+            socket.emit('answer', {
+                answer: peerConnection.localDescription,
+                target: data.from,
+                from: socketId,
+                roomId: roomId
+            });
+            
+            // Offer aldığımızda waitingScreen'i gizle (yayın gelecek demektir)
+            waitingScreen.classList.add('hidden');
+        } catch (error) {
+            debug('Offer işlenirken hata:', error);
+            
+            // Hata durumunda bağlantıyı temizle ve yeniden dene
+            cleanupPeerConnection(data.from);
+            
+            // Kısa bir süre sonra yeniden bağlanmayı dene
+            setTimeout(() => {
+                socket.emit('ready', { 
+                    roomId: roomId,
+                    from: socketId,
+                    to: data.from 
+                });
+            }, 1000);
+        }
     });
 
     socket.on('answer', async (data) => {
         debug('Answer alındı:', data);
         
-        const peerConnection = peerConnections[data.from];
-        if (peerConnection) {
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-            debug('Remote description başarıyla set edildi');
+        try {
+            const peerConnection = peerConnections[data.from];
+            if (peerConnection) {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                debug('Remote description başarıyla set edildi');
+            } else {
+                debug('Answer için peer bağlantısı bulunamadı, yeniden bağlanılıyor...');
+                socket.emit('ready', { 
+                    roomId: roomId,
+                    from: socketId,
+                    to: data.from 
+                });
+            }
+        } catch (error) {
+            debug('Answer işlenirken hata:', error);
+            
+            // Hata durumunda bağlantıyı temizle ve yeniden dene
+            cleanupPeerConnection(data.from);
+            
+            // Kısa bir süre sonra yeniden bağlanmayı dene
+            setTimeout(() => {
+                socket.emit('ready', { 
+                    roomId: roomId,
+                    from: socketId,
+                    to: data.from 
+                });
+            }, 1000);
         }
     });
 
@@ -1218,17 +1481,26 @@ function setupSocketEvents() {
 
 // Mevcut video bağlantısını temizle
 function cleanupCurrentConnection() {
-    if (currentSharer && peerConnections[currentSharer]) {
-        debug(`Mevcut ekran paylaşım bağlantısı temizleniyor: ${currentSharer}`);
-        peerConnections[currentSharer].close();
-        delete peerConnections[currentSharer];
-    }
+    // Tüm peer bağlantılarını kapat
+    Object.keys(peerConnections).forEach(peerId => {
+        if (peerConnections[peerId]) {
+            debug(`Peer bağlantısı temizleniyor: ${peerId}`);
+            peerConnections[peerId].close();
+            delete peerConnections[peerId];
+        }
+    });
     
-    if (screenDisplay.srcObject) {
+    // Video akışını temizle
+    if (screenDisplay && screenDisplay.srcObject) {
         const tracks = screenDisplay.srcObject.getTracks();
-        tracks.forEach(track => track.stop());
+        tracks.forEach(track => {
+            track.stop();
+            debug('Video track durduruldu');
+        });
         screenDisplay.srcObject = null;
     }
+    
+    debug('Tüm bağlantılar temizlendi');
 }
 
 // Video kontrolleri için oynatma/durdurma işlevleri
@@ -1238,6 +1510,9 @@ function initVideoControls() {
         screenDisplay.addEventListener('loadeddata', () => {
             debug('Video verisi yüklendi, kontroller etkinleştiriliyor...');
             videoControls.style.opacity = '1';
+            
+            // Video yüklendiğinde waitingScreen'i gizle
+            waitingScreen.classList.add('hidden');
             
             // Buffer yönetimi
             screenDisplay.buffered = bufferSize;
@@ -1348,6 +1623,33 @@ function setupMobileUI() {
             const messageInput = document.getElementById('messageInput');
             if (messageInput) {
                 messageInput.style.padding = '10px';
+                
+                // Mobil klavye açıldığında form pozisyonunu düzelt
+                messageInput.addEventListener('focus', () => {
+                    if (isTheaterMode) {
+                        // Tiyatro modunda klavye açıldığında form'u yukarı kaydır
+                        const chatForm = document.getElementById('chatForm');
+                        if (chatForm) {
+                            chatForm.style.position = 'fixed';
+                            chatForm.style.bottom = '0';
+                            
+                            // Mesajları en alta kaydır
+                            setTimeout(() => {
+                                scrollChatToBottom();
+                            }, 300);
+                        }
+                    }
+                });
+                
+                // Klavye kapandığında form pozisyonunu düzelt
+                messageInput.addEventListener('blur', () => {
+                    if (isTheaterMode) {
+                        // Kısa bir gecikme ile mesajları en alta kaydır
+                        setTimeout(() => {
+                            scrollChatToBottom();
+                        }, 300);
+                    }
+                });
             }
         }
     }
@@ -1467,8 +1769,21 @@ function initRoom() {
     debug(`Oda ID: ${roomId}`);
     roomIdDisplay.textContent = roomId;
     
-    // Kullanıcı adını local storage'dan al
-    username = localStorage.getItem('watchtug_username') || 'Misafir';
+    // Kullanıcı adını local storage'dan al ve doğrula
+    const storedUsername = localStorage.getItem('watchtug_username');
+    if (storedUsername) {
+        const validation = validateUsername(storedUsername);
+        if (validation.isValid) {
+            username = validation.sanitizedValue;
+        } else {
+            // Eğer geçersizse localStorage'dan sil ve varsayılan değeri kullan
+            localStorage.removeItem('watchtug_username');
+            username = 'Misafir';
+        }
+    } else {
+        username = 'Misafir';
+    }
+    
     debug(`Kullanıcı adı: ${username}`);
     
     // Mobil optimizasyonları
@@ -1487,6 +1802,74 @@ function initRoom() {
 
     // Setup performance monitor
     setupPerformanceMonitor();
+    
+    // Odaya katıl
+    joinRoom();
+}
+
+// Kullanıcı adı modalini göster
+function showUsernameModal() {
+    usernameModal.style.display = 'flex';
+    modalUsername.focus();
+    
+    // Modal içindeki katıl butonuna click event ekle
+    joinWithUsername.addEventListener('click', handleUsernameSubmit);
+    
+    // Enter tuşuna basıldığında da submit et
+    modalUsername.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            handleUsernameSubmit();
+        }
+    });
+}
+
+// Kullanıcı adı gönderildiğinde
+function handleUsernameSubmit() {
+    const inputUsername = modalUsername.value;
+    const validation = validateUsername(inputUsername);
+    
+    if (!validation.isValid) {
+        usernameError.textContent = validation.message;
+        usernameError.classList.remove('hidden');
+        modalUsername.classList.add('border-red-500');
+        return;
+    }
+    
+    // Geçerli kullanıcı adını kaydet
+    username = validation.sanitizedValue;
+    localStorage.setItem('watchtug_username', username);
+    
+    // Modalı kapat
+    usernameModal.style.display = 'none';
+    
+    // Odaya başla
+    debug(`Kullanıcı adı ayarlandı: ${username}`);
+    startRoom();
+}
+
+// Oda kurulumunu başlat - Modal sonrası çağrılır
+function startRoom() {
+    debug(`Oda kurulumu başlatılıyor. Kullanıcı: ${username}, Oda: ${roomId}`);
+    
+    // Mobil optimizasyonları
+    setupMobileUI();
+    setupTouchControls();
+    optimizeForMobile();
+    
+    // Video kontrollerini başlat
+    initVideoControls();
+    
+    // Setup event listeners
+    setupEventListeners();
+    
+    // Setup socket events
+    setupSocketEvents();
+
+    // Setup performance monitor
+    setupPerformanceMonitor();
+    
+    // Join room
+    joinRoom();
 }
 
 // Sayfa tamamen yüklendiğinde
@@ -1500,33 +1883,61 @@ window.addEventListener('load', () => {
     if (document.referrer.includes(window.location.hostname) || autoReconnect) {
         debug('Sayfa yenilemesi algılandı, özel yeniden bağlanma başlatılıyor...');
         
-        // Mevcut bağlantıları temizle
+        // Mevcut bağlantıları tamamen temizle
         cleanupCurrentConnection();
+        
+        // Tüm peer bağlantılarını kapat
+        Object.keys(peerConnections).forEach(peerId => {
+            cleanupPeerConnection(peerId);
+        });
+        
+        // Video elementini temizle
+        if (screenDisplay && screenDisplay.srcObject) {
+            const tracks = screenDisplay.srcObject.getTracks();
+            tracks.forEach(track => track.stop());
+            screenDisplay.srcObject = null;
+        }
         
         // Daha hızlı yeniden bağlanma için hazırlık
         setTimeout(() => {
-            if (isConnectedToServer && roomId) {
+            if (socket && socket.connected) {
                 debug('Sunucuya yeniden bağlanılıyor...');
-                socket.emit('ready', roomId);
                 
-                // Eğer ekran paylaşımı yapan kullanıcı varsa, tüm kullanıcılara yeniden bağlantı kur
-                if (currentSharer) {
-                    debug('Ekran paylaşımı yeniden başlatılıyor...');
-                    const userElements = document.querySelectorAll('.user-item');
-                    userElements.forEach(element => {
-                        const userId = element.id.replace('user-', '');
-                        if (userId !== socketId) {
-                            createPeerConnectionAndOffer(userId);
-                        }
-                    });
-                }
+                // Önce odaya yeniden katıl
+                socket.emit('join-room', roomId);
+                
+                // Aktif yayınları kontrol et ve bağlantıyı kur
+                socket.emit('check-active-streams', { roomId }, (response) => {
+                    if (response && response.sharer) {
+                        debug(`Aktif yayın tespit edildi: ${response.sharer}. Bağlantı kuruluyor...`);
+                        currentSharer = response.sharer;
+                        
+                        // Doğrudan yayıncıya ready sinyali gönder
+                        socket.emit('ready', { 
+                            roomId: roomId,
+                            from: socketId,
+                            to: currentSharer 
+                        });
+                        
+                        // waitingScreen'i gizle, yayın bağlantısı kurulacak
+                        waitingScreen.classList.add('hidden');
+                        
+                        // 2 saniye sonra video bağlantısını yenile
+                        setTimeout(refreshVideoConnection, 2000);
+                    }
+                });
             } else {
                 debug('Halen bağlantı kurulmamış, yeniden deneniyor...');
                 if (socket && typeof socket.connect === 'function') {
                     socket.connect();
+                    
+                    // Bağlantı kurulduktan sonra odaya katıl
+                    socket.once('connect', () => {
+                        socket.emit('join-room', roomId);
+                    });
                 }
             }
-        }, 1000);
+        }, 500); // Daha hızlı tepki için süreyi azalttım
     }
 });
 
@@ -1755,6 +2166,11 @@ function setupEventListeners() {
                 isTheaterMode = false;
                 
                 theaterModeBtn.querySelector('i').className = 'fas fa-film';
+                
+                // Normal moda döndüğünde chat mesajlarını en alta kaydır
+                setTimeout(() => {
+                    scrollChatToBottom();
+                }, 100);
             } else {
                 // Tiyatro moduna geç
                 mainContainer.classList.add('theater-layout');
@@ -1768,6 +2184,30 @@ function setupEventListeners() {
                 }
                 
                 theaterModeBtn.querySelector('i').className = 'fas fa-compress';
+                
+                // Tiyatro moduna geçtiğinde chat mesajlarını en alta kaydır
+                // Mobil cihazlarda birkaç kez deneme yaparak
+                if (isMobile) {
+                    // İlk deneme
+                    setTimeout(() => {
+                        scrollChatToBottom();
+                        
+                        // İkinci deneme
+                        setTimeout(() => {
+                            scrollChatToBottom();
+                            
+                            // Üçüncü deneme
+                            setTimeout(() => {
+                                scrollChatToBottom();
+                            }, 200);
+                        }, 100);
+                    }, 100);
+                } else {
+                    // Masaüstü için normal kaydırma
+                    setTimeout(() => {
+                        scrollChatToBottom();
+                    }, 100);
+                }
             }
         });
     }
@@ -1847,21 +2287,19 @@ function setupEventListeners() {
 
 // Odaya katılma işlevi
 function joinRoom() {
-    if (!roomId) {
-        debug('Katılmak için oda ID bulunamadı!');
-        return;
-    }
+    debug(`Odaya katılınıyor... Oda: ${roomId}, Kullanıcı: ${username}`);
     
-    debug(`${roomId} odasına katılma isteği gönderiliyor...`);
-    socket.emit('join-room', roomId);
+    // Sunucuya kullanıcı adını gönder ve doğrulama sonrası odaya katıl
+    socket.emit('set-username', username);
     
-    // Odaya katıldıktan sonra, eğer bir yayıncı varsa hazır olduğumuzu bildir
+    // Odaya katılma isteğini doğrulama sonrası gönderecek şekilde güncelle
+    // Doğrulama sonucu socket.on('username-validated') event handler'ında işlenecek
     setTimeout(() => {
-        if (currentSharer && currentSharer !== socketId) {
-            debug(`Odaya katıldım, mevcut yayıncıya (${currentSharer}) hazır olduğumu bildiriyorum`);
-            socket.emit('ready', { roomId, from: socketId, to: currentSharer });
-        }
-    }, 1000);
+        socket.emit('join-room', roomId);
+    }, 300); // Küçük bir gecikme ekleyerek doğrulama işleminin tamamlanmasını bekle
+    
+    // Socket disconnect sonrası yeniden bağlanmada kullanılmak üzere son bilgileri sakla
+    hasJoinedBefore = true;
 }
 
 // Modern uyarı sistemi
@@ -1940,7 +2378,146 @@ function sendChatMessage(message) {
         timestamp: new Date(),
         isSystem: false
     });
+    
+    // Her zaman mesajları aşağı kaydır
+    scrollChatToBottom();
+    
+    // Mobil cihazlarda ekstra kaydırma
+    if (isMobile) {
+        setTimeout(() => {
+            scrollChatToBottom();
+        }, 100);
+        
+        // Tiyatro modunda ikinci bir kaydırma daha
+        if (isTheaterMode) {
+            setTimeout(() => {
+                scrollChatToBottom();
+            }, 300);
+        }
+    }
 }
 
 // Initialize on DOM load
 document.addEventListener('DOMContentLoaded', initRoom); 
+
+// Check for active streams in the room
+function checkForActiveStreams() {
+    if (roomId && socket && socket.connected) {
+        socket.emit('check-active-streams', { roomId }, (response) => {
+            if (response && response.sharer && response.sharer !== currentSharer) {
+                debug(`Aktif yayın tespit edildi: ${response.sharer}. Bağlantı kuruluyor...`);
+                currentSharer = response.sharer;
+                
+                // Connect to the stream if not already connected
+                if (!peerConnections[currentSharer]) {
+                    socket.emit('ready', { 
+                        roomId: roomId,
+                        from: socketId,
+                        to: currentSharer 
+                    });
+                    
+                    // Update UI to show who is sharing
+                    const userElement = document.getElementById(`user-${currentSharer}`);
+                    if (userElement) {
+                        userElement.classList.add('sharing');
+                        
+                        // Add sharing icon if not already there
+                        if (!userElement.querySelector('.fa-desktop')) {
+                            const sharingIcon = document.createElement('i');
+                            sharingIcon.className = 'fas fa-desktop ml-2 text-primary-400';
+                            userElement.appendChild(sharingIcon);
+                        }
+                        
+                        // Show notification
+                        const sharingUsername = userElement.querySelector('div:not(.user-avatar)').textContent.replace('(ben)', '').trim();
+                        showToast(`${sharingUsername} ekran paylaşımına bağlanılıyor...`, 3000);
+                    }
+                }
+            }
+            
+            // Sayfa yenilemesinden sonra video akışı varsa waitingScreen'i gizle
+            if (screenDisplay && screenDisplay.srcObject && screenDisplay.srcObject.active) {
+                waitingScreen.classList.add('hidden');
+            }
+        });
+    }
+}
+
+// Clean up resources when leaving the page
+window.addEventListener('beforeunload', () => {
+    // Clear intervals
+    if (activeStreamCheckInterval) {
+        clearInterval(activeStreamCheckInterval);
+    }
+    
+    // ... existing code if any ...
+}); 
+
+// Sayfa yenilendiğinde video akışının doğru şekilde görüntülenmesini sağla
+window.addEventListener('pageshow', (event) => {
+    // bfcache üzerinden geri dönüş durumunu kontrol et
+    if (event.persisted) {
+        debug('Sayfa bfcache üzerinden geri yüklendi, bağlantıları yeniliyorum...');
+        
+        // Tüm bağlantıları temizle
+        cleanupCurrentConnection();
+        
+        // Odaya yeniden katıl
+        if (socket && socket.connected && roomId) {
+            socket.emit('join-room', roomId);
+            
+            // Aktif yayınları kontrol et
+            socket.emit('check-active-streams', { roomId }, (response) => {
+                if (response && response.sharer) {
+                    currentSharer = response.sharer;
+                    socket.emit('ready', { 
+                        roomId: roomId,
+                        from: socketId,
+                        to: currentSharer 
+                    });
+                }
+            });
+        }
+    }
+}); 
+
+// Video bağlantısını yenile
+function refreshVideoConnection() {
+    debug('Video bağlantısı yenileniyor...');
+    
+    // Eğer aktif bir yayıncı yoksa işlem yapma
+    if (!currentSharer) {
+        debug('Aktif yayıncı yok, işlem yapılmıyor');
+        return;
+    }
+    
+    // Mevcut video bağlantısını temizle ama track'leri durdurma
+    if (peerConnections[currentSharer]) {
+        debug(`Mevcut peer bağlantısı kapatılıyor: ${currentSharer}`);
+        peerConnections[currentSharer].close();
+        delete peerConnections[currentSharer];
+    }
+    
+    // Yeni bir bağlantı oluştur
+    debug(`Yayıncı ile yeni bağlantı kuruluyor: ${currentSharer}`);
+    socket.emit('ready', { 
+        roomId: roomId,
+        from: socketId,
+        to: currentSharer 
+    });
+    
+    // waitingScreen'i göster, yeni bağlantı kurulana kadar
+    waitingScreen.classList.remove('hidden');
+    
+    // 5 saniye içinde bağlantı kurulmazsa tekrar dene
+    setTimeout(() => {
+        if (waitingScreen.classList.contains('hidden') === false) {
+            debug('Bağlantı kurulamadı, tekrar deneniyor...');
+            socket.emit('ready', { 
+                roomId: roomId,
+                from: socketId,
+                to: currentSharer 
+            });
+        }
+    }, 5000);
+} 

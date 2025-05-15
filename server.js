@@ -52,6 +52,50 @@ function logRooms() {
     });
 }
 
+// Kullanıcı adını doğrula
+function validateUsername(username) {
+    // Boş veya çok kısa kullanıcı adlarını reddet
+    if (!username || typeof username !== 'string' || username.trim().length < 2) {
+        return {
+            isValid: false,
+            message: 'Kullanıcı adı en az 2 karakter olmalıdır'
+        };
+    }
+    
+    // Kullanıcı adını temizle
+    const sanitizedUsername = username.trim();
+    
+    // Küfür ve uygunsuz kelime kontrolü
+    const blockedWords = [
+        'amk', 'aq', 'sg', 'oç', 'piç', 'yavşak', 'amına', 'sikerim', 'sikim', 'amcık', 'amcik',
+        'ananısikim', 'ananisikim', 'anan', 'sikeyim', 'sikik', 'amq', 'amcık', 'amcik', 'amına koyayım',
+        'amina koyayim', 'amına koyim', 'amina koyim', 'mk', 'aq', 'sg', 'oc', 'pic', 'yavşak'
+    ];
+    
+    const lowerUsername = sanitizedUsername.toLowerCase();
+    for (const word of blockedWords) {
+        if (lowerUsername.includes(word)) {
+            return {
+                isValid: false,
+                message: 'Kullanıcı adında uygunsuz kelimeler bulunamaz'
+            };
+        }
+    }
+    
+    // Maksimum uzunluk kontrolü
+    if (sanitizedUsername.length > 20) {
+        return {
+            isValid: false,
+            message: 'Kullanıcı adı en fazla 20 karakter olabilir'
+        };
+    }
+    
+    return {
+        isValid: true,
+        sanitizedValue: sanitizedUsername
+    };
+}
+
 // Socket.io bağlantı işlemleri
 io.on('connection', (socket) => {
     // Kullanıcının IP adresini al
@@ -72,15 +116,48 @@ io.on('connection', (socket) => {
 
     // Kullanıcı adını ayarla
     socket.on('set-username', (username) => {
-        console.log(`Kullanıcı adı ayarlandı: ${socket.id} -> ${username}`);
-        socket.username = username;
+        // Kullanıcı adını doğrula
+        const validation = validateUsername(username);
+        
+        if (!validation.isValid) {
+            console.log(`Geçersiz kullanıcı adı: ${username} - ${validation.message}`);
+            socket.emit('username-error', { message: validation.message });
+            return;
+        }
+        
+        const validatedUsername = validation.sanitizedValue;
+        console.log(`Kullanıcı adı ayarlandı: ${socket.id} -> ${validatedUsername}`);
+        socket.username = validatedUsername;
         
         // IP ile kullanıcı bilgilerini eşleştir
         userSessions[clientIp] = {
             socketId: socket.id,
-            username: username,
+            username: validatedUsername,
             room: socket.room
         };
+        
+        // Kullanıcıya başarılı doğrulama bilgisi gönder
+        socket.emit('username-validated', { username: validatedUsername });
+    });
+    
+    // Check active streams in a room
+    socket.on('check-active-streams', (data, callback) => {
+        const roomId = data.roomId;
+        
+        if (!roomId || !rooms[roomId]) {
+            callback({ error: 'Oda bulunamadı' });
+            return;
+        }
+        
+        // Return the active sharer in the room if there is one
+        if (rooms[roomId].sharer) {
+            callback({ 
+                sharer: rooms[roomId].sharer,
+                mediaState: rooms[roomId].mediaState || { hasAudio: true, hasVideo: true }
+            });
+        } else {
+            callback({ sharer: null });
+        }
     });
     
     // Oda oluşturma
@@ -226,7 +303,8 @@ io.on('connection', (socket) => {
         // Kullanıcıya oda bilgilerini gönder
         socket.emit('room-joined', { 
             roomId: cleanRoomId,
-            users: roomUsers
+            users: roomUsers,
+            currentSharer: rooms[cleanRoomId].sharer || null // Aktif yayıncı bilgisini ekle
         });
         
         // Geçmiş mesajları gönder
@@ -270,11 +348,30 @@ io.on('connection', (socket) => {
     });
     
     // Hazır sinyali
-    socket.on('ready', (roomId) => {
-        console.log(`Hazır sinyali: ${socket.id} -> ${roomId}`);
+    socket.on('ready', (payload) => {
+        // Payload bir string veya obje olabilir
+        let roomId, targetId;
         
-        // Odadaki diğer kullanıcılara hazır sinyalini gönder
-        socket.broadcast.to(roomId).emit('ready', { from: socket.id });
+        if (typeof payload === 'string') {
+            roomId = payload.trim();
+            console.log(`Hazır sinyali (genel): ${socket.id} -> ${roomId}`);
+            
+            // Odadaki diğer kullanıcılara hazır sinyalini gönder
+            socket.broadcast.to(roomId).emit('ready', { from: socket.id });
+        } else if (typeof payload === 'object') {
+            roomId = payload.roomId;
+            targetId = payload.to;
+            
+            console.log(`Hazır sinyali (özel): ${socket.id} -> ${targetId} (Oda: ${roomId})`);
+            
+            // Sadece belirtilen kullanıcıya hazır sinyalini gönder
+            if (targetId) {
+                io.to(targetId).emit('ready', { from: socket.id });
+            } else {
+                // Hedef belirtilmemişse odadaki herkese gönder
+                socket.broadcast.to(roomId).emit('ready', { from: socket.id });
+            }
+        }
     });
     
     // WebRTC teklifi (offer)
@@ -342,6 +439,18 @@ io.on('connection', (socket) => {
             userId: socket.id,
             hasAudio,
             hasVideo
+        });
+        
+        // Odadaki tüm kullanıcıların otomatik olarak yayına bağlanmasını sağla
+        rooms[roomId].users.forEach(user => {
+            // Paylaşım yapan kullanıcı hariç herkese ready sinyali gönder
+            if (user.id !== socket.id) {
+                console.log(`Otomatik ready sinyali gönderiliyor: ${user.id} -> ${socket.id}`);
+                io.to(user.id).emit('auto-connect-stream', { 
+                    roomId: roomId,
+                    sharerId: socket.id
+                });
+            }
         });
     });
     
