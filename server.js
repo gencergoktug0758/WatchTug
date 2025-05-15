@@ -651,3 +651,6 @@ server.listen(PORT, '0.0.0.0', () => {
   log(`WatchTug sunucusu ${PORT} portunda çalışıyor`, 'success');
   log(`http://localhost:${PORT} adresinden erişebilirsiniz`, 'success');
 }); 
+
+// Vercel için module exports
+module.exports = app;
